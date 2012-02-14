@@ -2,7 +2,7 @@
 ;; pcre2el.el -- quick and dirty conversion from PCRE-style regexps to
 ;; Emacs Lisp syntax.
 ;;
-;; Author: j.j.oddie@gmail.com
+;; Author: j.j.oddie at gmail.com
 ;;  
 ;; This code is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published
@@ -46,11 +46,10 @@
   (defmacro pcre-token-case (&rest cases)
     "Consume a token at point and evaluate corresponding forms.
 
-CASES is a list of `cond'-like lists (REGEXP FORMS). Considering
-CASES in order, if the text at point matches REGEXP then move
-point over the matched string and return the value of FORMS.
-
-Returns `nil' if none of the CASES matches."
+CASES is a list of `cond'-like clauses, (REGEXP FORMS
+...). Considering CASES in order, if the text at point matches
+REGEXP then moves point over the matched string and returns the
+value of FORMS. Returns `nil' if none of the CASES matches."
     (declare (debug (&rest (sexp &rest form))))
     `(cond
       ,@(mapcar
@@ -73,7 +72,8 @@ Returns `nil' if none of the CASES matches."
       (while (not (eobp))
 	(let ((translated
 	       (or
-		;; Tokens treated the same in character classes
+		;; Handle tokens that are treated the same in
+		;; character classes
 		(pcre-re-or-class-token-to-elisp)   
 
 		;; Other tokens
@@ -91,8 +91,9 @@ Returns `nil' if none of the CASES matches."
 		 ("\\\\\\([0-9]+\\)"
 		  (let* ((digits (match-string 1))
 			 (dec (string-to-number digits)))
-		    ;; If the number is less than 10, or if there have
-		    ;; been at least that many previous capturing left
+		    ;; from "man pcrepattern": If the number is
+		    ;; less than 10, or if there have been at
+		    ;; least that many previous capturing left
 		    ;; parentheses in the expression, the entire
 		    ;; sequence is taken as a back reference.
 		    (cond ((< dec 10) (concat "\\" digits))
@@ -100,13 +101,15 @@ Returns `nil' if none of the CASES matches."
 			   (error "backreference \\%s can't be used in Emacs regexps"
 				  digits))
 			  (t
-			   ;; if the decimal number is greater than 9
-			   ;; and there have not been that many
-			   ;; capturing subpatterns, PCRE re-reads up
-			   ;; to three octal digits following the
-			   ;; backslash, and uses them to generate a
-			   ;; data character. Any subsequent digits
-			   ;; stand for themselves.
+			   ;; from "man pcrepattern": if the
+			   ;; decimal number is greater than 9 and
+			   ;; there have not been that many
+			   ;; capturing subpatterns, PCRE re-reads
+			   ;; up to three octal digits following
+			   ;; the backslash, and uses them to
+			   ;; generate a data character. Any
+			   ;; subsequent digits stand for
+			   ;; themselves.
 			   (goto-char (match-beginning 1))
 			   (re-search-forward "[0-7]\\{0,3\\}")
 			   (char-to-string (string-to-number (match-string 0) 8))))))
@@ -233,7 +236,7 @@ will be just after the closing \"]\" when it returns."
 		"\\)")))))
 
 
-;;;; A few simple tests
+    ;;;; A few simple tests
 
 ;; Regexp quoting
 (let* ((string "String $ with (( ) regexp \\ special [a-z] characters")
@@ -257,7 +260,7 @@ will be just after the closing \"]\" when it returns."
   (assert (not (string-match re "bad: 23")))
   (assert (not (string-match re "also bad: 944732"))))
 
-    ;;;; Weird rules for \digits
+        ;;;; Weird rules for \digits
 ;; \040   is another way of writing a space
 (assert (string-match-p (pcre-to-elisp "\040") " "))
 
