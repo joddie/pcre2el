@@ -167,7 +167,7 @@ classes as outside them."
 Point should be after the opening \"[\" when this is called, and
 will be just after the closing \"]\" when it returns."
   (let ((accum '("["))
-	(pcre-char-class-alternatives '())
+	(alternatives '())
 	(negated nil))
     (when (looking-at "\\^")
       (setq negated t)
@@ -185,30 +185,30 @@ will be just after the closing \"]\" when it returns."
 		(char-to-string (string-to-number (match-string 1) 8)))
 
 	       ;; Various character classes. To implement negative char classes,
-	       ;; we cons them onto the list `pcre-char-class-alternatives' and
+	       ;; we cons them onto the list `alternatives' and
 	       ;; transform the char class into a shy group with alternation
 	       ("\\\\d" "0-9")
 	       ("\\\\D" (push (if negated "[0-9]" "[^0-9]")
-			      pcre-char-class-alternatives) "")
+			      alternatives) "")
 	       ("\\\\h" pcre-horizontal-whitespace-chars)
 	       ("\\\\H" (push (if negated
 				  pcre-horizontal-whitespace
 				pcre-non-horizontal-whitespace)
-			      pcre-char-class-alternatives) "")
+			      alternatives) "")
 	       ("\\\\s" pcre-whitespace-chars)
 	       ("\\\\S" (push (if negated
 				  pcre-whitespace
 				pcre-non-whitespace)
-			      pcre-char-class-alternatives) "")
+			      alternatives) "")
 	       ("\\\\v" pcre-vertical-whitespace-chars)
 	       ("\\\\V" (push (if negated
 				  pcre-vertical-whitespace
 				pcre-non-vertical-whitespace)
-			      pcre-char-class-alternatives) "")
+			      alternatives) "")
 	       ("\\\\w" (push (if negated "\\W" "\\w") 
-			      pcre-char-class-alternatives) "")
+			      alternatives) "")
 	       ("\\\\W" (push (if negated "\\w" "\\W") 
-			      pcre-char-class-alternatives) "")
+			      alternatives) "")
 
 	       ;; Leave POSIX syntax unchanged
 	       ("\\[:[a-z]*:\\]" (match-string 0))
@@ -226,17 +226,17 @@ will be just after the closing \"]\" when it returns."
       (when (or (equal class "[]")
 		(equal class "[^]"))
 	(setq class ""))
-      (if (not pcre-char-class-alternatives)
+      (if (not alternatives)
 	  class
 	(concat "\\(?:"
 		class "\\|"
 		(mapconcat 'identity
-			   pcre-char-class-alternatives
+			   alternatives
 			   "\\|")
 		"\\)")))))
 
 
-    ;;;; A few simple tests
+;;;; A few simple tests
 
 ;; Regexp quoting
 (let* ((string "String $ with (( ) regexp \\ special [a-z] characters")
