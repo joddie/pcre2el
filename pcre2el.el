@@ -71,6 +71,29 @@ value of FORMS. Returns `nil' if none of the CASES matches."
 	 cases)
       (t nil))))
 
+(defun pcre-query-replace-regexp (REGEXP TO-STRING &optional DELIMITED START END)
+  "Use a PCRE regexp to search and replace with.
+   This calls query-replace-regexp after converting the PCRE input to
+   an elisp version of the search regexp"
+  (interactive
+   ;; the following interactive code was taken from replace.el from emacs
+   (let ((common
+          (query-replace-read-args
+           (concat "Query replace"
+                   (if current-prefix-arg " word" "")
+                   " regexp"
+                   (if (and transient-mark-mode mark-active) " in region" ""))
+           t)))
+     (list (nth 0 common) (nth 1 common) (nth 2 common)
+           ;; These are done separately here
+           ;; so that command-history will record these expressions
+           ;; rather than the values they had this time.
+           (if (and transient-mark-mode mark-active)
+               (region-beginning))
+           (if (and transient-mark-mode mark-active)
+               (region-end)))))
+  (query-replace-regexp (pcre-to-elisp REGEXP) TO-STRING DELIMITED START END))
+
 (defun pcre-to-elisp (pcre)
   "Convert PCRE, a regexp in PCRE notation, into Elisp string form."
   (with-temp-buffer
