@@ -2,7 +2,8 @@
 ;; pcre2el.el -- quick and dirty conversion from PCRE-style regexps to
 ;; Emacs Lisp syntax.
 ;;
-;; Author: j.j.oddie at gmail.com
+;; Author:                   j.j.oddie at gmail.com
+;; Hacked additiionally by:  opensource at hardakers dot net
 ;;  
 ;; This code is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published
