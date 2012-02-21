@@ -14,10 +14,19 @@
 ;;      http://stackoverflow.com/questions/9118183/elisp-mechanism-for-converting-pcre-regexps-to-emacs-regexps
 ;;
 ;; Documentation:
-;;   Use the following function to perform a conversion:
-;;     (pcre-to-elisp "(abc|def)\\w+\\d+")
-;;   Produces:
-;;     "\(abc\|def\)\w+[0-9]+"
+;;   - Using the conversion function:
+;;
+;;     Use the following function to perform a conversion:
+;;       (pcre-to-elisp "(abc|def)\\w+\\d+")
+;;     Produces:
+;;       "\(abc\|def\)\w+[0-9]+"
+;;
+;;   - Interactive replacements:
+;;
+;;     You may want to perform the following key bindings if you
+;;     prefer PCRE generally over the elisp counterparts:
+;;
+;;     (global-set-key [(meta %)] 'pcre-query-replace-regexp)
 ;;
 (eval-when-compile (require 'cl))
 
