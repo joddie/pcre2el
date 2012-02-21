@@ -9,7 +9,16 @@
 ;; by the Free Software Foundation; either version 2, or (at your
 ;; option) any later version.
 ;;
-
+;; History:
+;;   This was created out of an answer to a stackoverflow question:
+;;      http://stackoverflow.com/questions/9118183/elisp-mechanism-for-converting-pcre-regexps-to-emacs-regexps
+;;
+;; Documentation:
+;;   Use the following function to perform a conversion:
+;;     (pcre-to-elisp "(abc|def)\\s+\\w+")
+;;   Produces:
+;;     \(abc\|def\)[	\\n ]+\w+
+;;
 (eval-when-compile (require 'cl))
 
 (defvar pcre-horizontal-whitespace-chars
