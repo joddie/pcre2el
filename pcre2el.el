@@ -15,9 +15,9 @@
 ;;
 ;; Documentation:
 ;;   Use the following function to perform a conversion:
-;;     (pcre-to-elisp "(abc|def)\\s+\\w+")
+;;     (pcre-to-elisp "(abc|def)\\w+\\d+")
 ;;   Produces:
-;;     \(abc\|def\)[	\\n ]+\w+
+;;     "\(abc\|def\)\w+[0-9]+"
 ;;
 (eval-when-compile (require 'cl))
 
