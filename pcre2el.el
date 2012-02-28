@@ -1,20 +1,55 @@
+;; pcre2el.el -- limited PCRE to Elisp regexp syntax converter
 ;;
-;; pcre2el.el -- quick and dirty conversion from PCRE-style regexps to
-;; Emacs Lisp syntax.
+;; Author:			j.j.oddie at gmail.com
+;; Hacked additionally by:	opensource at hardakers dot net
+;; Created:			14 Feb 2012
+;; Updated:			28 Feb 2012
+
+;; This file is NOT part of GNU Emacs.
+
+;; This program is free software: you can redistribute it and/or
+;; modify it under the terms of the GNU General Public License as
+;; published by the Free Software Foundation, either version 3 of the
+;; License, or (at your option) any later version.
 ;;
-;; Author:                   j.j.oddie at gmail.com
-;; Hacked additiionally by:  opensource at hardakers dot net
-;;  
-;; This code is free software; you can redistribute it and/or modify
-;; it under the terms of the GNU General Public License as published
-;; by the Free Software Foundation; either version 2, or (at your
-;; option) any later version.
+;; This program is distributed in the hope that it will be useful, but
+;; WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+;; General Public License for more details.
 ;;
+;; You should have received a copy of the GNU General Public License
+;; along with this program.  If not, see `http://www.gnu.org/licenses/'.
+
+
+;;; Commentary:
+
 ;; History:
 ;;   This was created out of an answer to a stackoverflow question:
 ;;      http://stackoverflow.com/questions/9118183/elisp-mechanism-for-converting-pcre-regexps-to-emacs-regexps
 ;;
 ;; Documentation:
+;;
+;; This file provides support for a limited subset of PCRE (Perl
+;; Compatible Regular Expression) syntax by translating it into Emacs'
+;; native regexp syntax. The conversion is based mostly on the
+;; description in the pcrepattern man page, and works token by token,
+;; converting the following PCRE constructions to their Emacs
+;; equivalents:
+;;
+;;   - parenthesis grouping ( .. )
+;;   - alternation |
+;;   - numerical repeats {M,N}
+;;   - string quoting \Q .. \E
+;;   - simple character escapes: \a, \c, \e, \f, \n, \r, \t, \x, and \octal digits
+;;   - character classes: \d, \D, \h, \H, \s, \S, \v, \V
+;;   - \w and \W left as they are (using Emacs' own idea of word and
+;;     non-word characters)
+;;
+;; It doesn't do anything with more complicated PCRE assertions, but
+;; it does try to convert escapes inside character classes. In the
+;; case of character classes including something like \D, this is
+;; done by converting into a non-capturing group with alternation.
+;;
 ;;   - Using the conversion function:
 ;;
 ;;     Use the following function to perform a conversion:
@@ -29,6 +64,7 @@
 ;;
 ;;     (global-set-key [(meta %)] 'pcre-query-replace-regexp)
 ;;
+
 (eval-when-compile (require 'cl))
 
 (defvar pcre-horizontal-whitespace-chars
@@ -81,7 +117,7 @@ value of FORMS. Returns `nil' if none of the CASES matches."
 	 cases)
       (t nil))))
 
-(defun pcre-query-replace-regexp (REGEXP TO-STRING &optional DELIMITED START END)
+(defun pcre-query-replace-regexp (regexp to-string &optional delimited start end)
   "Use a PCRE regexp to search and replace with.
    This calls query-replace-regexp after converting the PCRE input to
    an elisp version of the search regexp"
@@ -102,7 +138,7 @@ value of FORMS. Returns `nil' if none of the CASES matches."
                (region-beginning))
            (if (and transient-mark-mode mark-active)
                (region-end)))))
-  (query-replace-regexp (pcre-to-elisp REGEXP) TO-STRING DELIMITED START END))
+  (query-replace-regexp (pcre-to-elisp regexp) to-string delimited start end))
 
 (defun pcre-to-elisp (pcre)
   "Convert PCRE, a regexp in PCRE notation, into Elisp string form."
@@ -392,3 +428,5 @@ will be just after the closing \"]\" when it returns."
 ;; Double negation in character classes (perverse)
 (assert
  (string-match-p (pcre-to-elisp "^[^\\W]*$") "foo"))
+
+;;; pcre2el.el ends here
