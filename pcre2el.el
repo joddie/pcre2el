@@ -277,6 +277,8 @@ will be just after the closing \"]\" when it returns."
 			   "\\|")
 		"\\)")))))
 
+(provide 'pcre2el)
+
 
 ;;;; A few simple tests
 
