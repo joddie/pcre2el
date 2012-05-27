@@ -214,8 +214,8 @@ value of FORMS. Returns `nil' if none of the CASES matches."
 		 ;; Any other escaped character
 		 ("\\\\\\(.\\)" (regexp-quote (match-string 1)))
 
-		 ;; Any normal character
-		 ("." (match-string 0))))))
+		 ;; Any normal character, or newline
+		 (".\\|\n" (match-string 0))))))
 	  (push translated accum)))
       (apply 'concat (reverse accum)))))
 
