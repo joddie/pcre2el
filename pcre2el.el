@@ -141,12 +141,16 @@ value of FORMS. Returns `nil' if none of the CASES matches."
   (query-replace-regexp (pcre-to-elisp regexp) to-string delimited start end))
 
 (defun pcre-to-elisp (pcre)
-  "Convert PCRE, a regexp in PCRE notation, into Elisp string form."
-  (with-temp-buffer
-    (insert pcre)
-    (goto-char (point-min))
-    (let ((capture-count 0) (accum '())
-	  (case-fold-search nil))
+  "Convert PCRE, a regexp in PCRE notation, into Elisp string form.
+If called interactively, reads the PCRE regexp from the
+minibuffer and inserts its Elisp translation as a string literal
+at point."
+  (interactive "sPCRE Regexp: ")
+  (let ((capture-count 0) (accum '())
+	(case-fold-search nil))
+    (with-temp-buffer
+      (insert pcre)
+      (goto-char (point-min))
       (while (not (eobp))
 	(let ((translated
 	       (or
@@ -216,8 +220,11 @@ value of FORMS. Returns `nil' if none of the CASES matches."
 
 		 ;; Any normal character, or newline
 		 (".\\|\n" (match-string 0))))))
-	  (push translated accum)))
-      (apply 'concat (reverse accum)))))
+	  (push translated accum))))
+    (let ((result (apply 'concat (reverse accum))))
+      (if (called-interactively-p 'any)
+	  (prin1 result (current-buffer))
+	result))))
 
 (defun pcre-re-or-class-token-to-elisp ()
   "Consume the PCRE token at point and return its Elisp equivalent.
