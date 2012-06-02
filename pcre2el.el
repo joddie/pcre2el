@@ -96,7 +96,7 @@
 (defvar pcre-whitespace (concat "[" pcre-whitespace-chars "]"))
 
 (defvar pcre-non-whitespace (concat "[^" pcre-whitespace-chars "]"))
-
+ 
 (eval-when-compile
   (defmacro pcre-token-case (&rest cases)
     "Consume a token at point and evaluate corresponding forms.
@@ -114,8 +114,7 @@ value of FORMS. Returns `nil' if none of the CASES matches."
 	     `((looking-at ,token)
 	       (goto-char (match-end 0))
 	       ,@action)))
-	 cases)
-      (t nil))))
+	 cases))))
 
 (defun pcre-query-replace-regexp (regexp to-string &optional delimited start end)
   "Use a PCRE regexp to search and replace with.
