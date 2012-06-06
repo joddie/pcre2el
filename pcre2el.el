@@ -127,7 +127,7 @@ value of FORMS. Returns `nil' if none of the CASES matches."
           (query-replace-read-args
            (concat "Query replace"
                    (if current-prefix-arg " word" "")
-                   " regexp"
+                   " (pcre)regexp"
                    (if (and transient-mark-mode mark-active) " in region" ""))
            t)))
      (list (nth 0 common) (nth 1 common) (nth 2 common)
