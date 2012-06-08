@@ -872,7 +872,7 @@ in character classes as outside them."
        ("\\\\W" (rxt-negate 'word))
 
        ;; Ignore other escapes
-       ("\\\\\\(.\\)" (match-string 0)))))
+       ("\\\\\\(.\\)" (string-to-char (match-string 1))))))
 
 
 ;; Parse a possible range tail. Called when point is before a dash "-"
