@@ -959,3 +959,98 @@ in character classes as outside them."
 ;; 		  (format "%c-%c" begin end)))
 ;; 	      ranges ", ")
 ;; 	     (mapconcat #'symbol-name classes ", "))))
+
+
+;;;; RE-Builder extensions from re-builder.el -- to be turned into advice
+(defun reb-change-syntax (&optional syntax)
+  "Change the syntax used by the RE Builder.
+Optional argument SYNTAX must be specified if called non-interactively."
+  (interactive
+   (list (intern
+	  (completing-read "Select syntax: "
+			   (mapcar (lambda (el) (cons (symbol-name el) 1))
+				   '(read string pcre lisp-re sregex rx))
+			   nil t (symbol-name reb-re-syntax)))))
+
+  (if (memq syntax '(read string pcre lisp-re sregex rx))
+      (let ((buffer (get-buffer reb-buffer)))
+	(setq reb-re-syntax syntax)
+	(with-current-buffer reb-target-buffer
+	  (case syntax
+	    ((rx)
+	     (setq reb-regexp-src
+		   (format "'%S"
+			   (rxt-elisp->rx reb-regexp))))
+	    ((pcre
+	      (setq reb-regexp-src "")))))
+	(when buffer
+          (with-current-buffer buffer
+	    
+            (reb-initialize-buffer))))
+    (error "Invalid syntax: %s" syntax)))
+
+(defun reb-read-regexp ()
+  "Read current RE."
+  (save-excursion
+    (cond ((eq reb-re-syntax 'read)
+	   (goto-char (point-min))
+	   (read (current-buffer)))
+
+	  ((eq reb-re-syntax 'string)
+	   (goto-char (point-min))
+	   (re-search-forward "\"")
+	   (let ((beg (point)))
+	     (goto-char (point-max))
+	     (re-search-backward "\"")
+	     (buffer-substring-no-properties beg (point))))
+
+	  ((or (reb-lisp-syntax-p) (eq reb-re-syntax 'pcre))
+	   (buffer-string)))))
+
+(defun reb-insert-regexp ()
+  "Insert current RE."
+
+  (let ((re (or (reb-target-binding reb-regexp)
+		(reb-empty-regexp))))
+  (cond ((eq reb-re-syntax 'read)
+	 (print re (current-buffer)))
+	((eq reb-re-syntax 'pcre)
+	 (insert (or (reb-target-binding reb-regexp-src)
+		     (reb-empty-regexp))))
+	((eq reb-re-syntax 'string)
+	 (insert "\n\"" re "\""))
+	;; For the Lisp syntax we need the "source" of the regexp
+	((reb-lisp-syntax-p)
+	 (insert (or (reb-target-binding reb-regexp-src)
+		     (reb-empty-regexp)))))))
+
+(defun reb-cook-regexp (re)
+  "Return RE after processing it according to `reb-re-syntax'."
+  (cond ((eq reb-re-syntax 'lisp-re)
+	 (when (fboundp 'lre-compile-string)
+	   (lre-compile-string (eval (car (read-from-string re))))))
+	((eq reb-re-syntax 'sregex)
+	 (apply 'sregex (eval (car (read-from-string re)))))
+	((eq reb-re-syntax 'rx)
+	 (rx-to-string (eval (car (read-from-string re))) t))
+	((eq reb-re-syntax 'pcre)
+	 (rxt-pcre->elisp re))
+	(t re)))
+
+(defun reb-update-regexp ()
+  "Update the regexp for the target buffer.
+Return t if the (cooked) expression changed."
+  (let* ((re-src (reb-read-regexp))
+	 (re (reb-cook-regexp re-src)))
+    (with-current-buffer reb-target-buffer
+      (let ((oldre reb-regexp))
+	(prog1
+	    (not (string= oldre re))
+	  (setq reb-regexp re)
+	  ;; Only update the source re for the lisp formats
+	  (when (or (reb-lisp-syntax-p) (eq reb-re-syntax 'pcre))
+	    (setq reb-regexp-src re-src)))))))
+
+
+
+(provide 'rxt)
