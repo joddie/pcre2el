@@ -97,6 +97,7 @@
 
 (require 'cl)
 (require 'rx)
+(require 're-builder)
 
 
 ;;; Scanner macro
@@ -673,6 +674,8 @@ CSET may be an `rxt-char-set', an `rxt-syntax-class', or an
        ;; Everything else
        (".\\|\n" (rxt-string (match-string 0))))))
 
+(defvar rxt-subgroup-count nil)
+
 (defun rxt-parse-atom/pcre ()
   (or (rxt-parse-atom/common)
 
@@ -747,8 +750,6 @@ in character classes as outside them."
     (string-to-number (match-string 1) 16))
    ("\\\\x{\\([A-Za-z0-9]*\\)}"
     (string-to-number (match-string 1) 16))))
-
-(defvar rxt-subgroup-count nil)
 
 (defun rxt-parse-subgroup (close)
   (incf rxt-subgroup-count)
