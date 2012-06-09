@@ -571,7 +571,7 @@ CSET may be an `rxt-char-set', an `rxt-syntax-class', or an
    ((rxt-char-set-negation-p re)
     (list '~ (rxt-adt->sre (rxt-char-set-negation-elt re))))
 
-   ((rxt-intersection re)
+   ((rxt-intersection-p re)
     (cons '& (mapcar #'rxt-adt->sre (rxt-intersection-elts re))))
 
    (t
