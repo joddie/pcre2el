@@ -291,7 +291,7 @@ value of FORMS. Returns `nil' if none of the CASES matches."
 
 ITEM may be a single character, a string or list of characters, a
 range represented as a cons (FROM . TO), a symbol representing a
-POSIX class, or an existingx character set which is returned
+POSIX class, or an existing character set which is returned
 unchanged."
   (cond
    ((rxt-cset-p item) item)
@@ -317,9 +317,9 @@ unchanged."
 (defun rxt-char-set-adjoin! (cset item)
   "Destructively add the contents of ITEM to character set CSET.
 
-ITEM may also be an rxt-char-set, or it can be any of these
-shortcut representations: a character, range, or a posix class
-symbol.
+CSET must be an rxt-char-set. ITEM may also be an rxt-char-set,
+or it can be any of these shortcut representations: a character,
+range, or a posix class symbol.
 
 The union of CSET and ITEM is returned; CSET may be destructively
 modified."
@@ -343,7 +343,7 @@ modified."
 	  (rxt-char-set-adjoin! cset thing))))
 
    (t
-    (error "Can't adjoin non-re-char-set, character, range or symbol %S" item)))
+    (error "Can't adjoin non-rxt-char-set, character, range or symbol %S" item)))
   cset)
 
 ;;; Complement of a character set or syntax class
@@ -881,7 +881,7 @@ CSET may be an `rxt-char-set', an `rxt-syntax-class', or an
 	
 	    ;; from "man pcrepattern": if the decimal number is greater
 	    ;; than 9 and there have not been that many capturing
-	    ;; subpatterns, PCRE rxt-reads up to three octal digits
+	    ;; subpatterns, PCRE re-reads up to three octal digits
 	    ;; following the backslash, and uses them to generate a data
 	    ;; character. Any subsequent digits stand for themselves.
 	    (goto-char (match-beginning 1))
