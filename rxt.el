@@ -1,11 +1,11 @@
-;; rxt.el -- PCRE and Elisp to rx/SRE regexp syntax converter
+;; rxt.el -- PCRE <-> Elisp <-> rx/SRE regexp syntax converter
 
 ;; Copyright (C) 2012 Jonathan Oddie
 
 ;;
 ;; Author:			j.j.oddie at gmail.com
 ;; Created:			4 June 2012
-;; Updated:			7 June 2012
+;; Updated:			9 June 2012
 
 ;; This file is NOT part of GNU Emacs.
 
@@ -57,30 +57,35 @@
 
 ;;; Commentary:
 
-;; This library provides support for parsing Emacs regular expressions
-;; and a limited subset of PCRE (Perl Compatible Regular Expressions)
-;; into S-expression based `rx' and SRE forms. Since the `rx' package
-;; can convert `rx' syntax into Elisp strings, this also allows
-;; translation of a PCRE subset into Emacs Lisp syntax. True SRE
-;; syntax is not supported by any Emacs package, but is included
-;; because a few constructions (charset difference and intersection)
-;; can be expressed in SRE but not in `rx'.
+;; This library provides support for translating regexp syntax back
+;; and forth between Emacs regular expressions, a limited subset of
+;; PCRE (Perl Compatible Regular Expressions), and the S-expression
+;; based `rx' and SRE forms.  More specifically, it provides an
+;; abstract data type (ADT) for representing regular expressions,
+;; parsers from PCRE and Elisp string notation to the, and "unparsers"
+;; from the ADT to PCRE, `rx', and SRE syntaxes. (Conversion back to
+;; Elisp regexps is handled in two steps, first to `rx' syntax, and
+;; then using `rx-to-string' from the `rx' library).
 ;;
 ;; The main functions of interest are `rxt-elisp->rx',
-;; `rxt-elisp->sre', `rxt-pcre->rx', `rxt-pcre->sre', and
-;; `rxt-pcre->elisp'.
+;; `rxt-elisp->sre', `rxt-pcre->rx', `rxt-pcre->sre',
+;; `rxt-pcre->elisp', and `rxt-elisp->pcre'. Additionally, various
+;; bits of the RE-Builder package are re-defined in a blatantly
+;; non-modular manner to support (emulated) PCRE syntax and conversion
+;; back and forth between PCRE, Elisp and rx syntax. (TODO: fix this.)
 ;;
-;; This code is partially based on Olin Shivers's reference SRE
-;; implementation in scsh: see scsh/re.scm and scsh/spencer.scm, from
-;; which it borrows the idea of an abstract data type (ADT) for
-;; regular expressions and the overall structure of the string regexp
-;; parser. The data types for character sets are extended to support
-;; symbolic translation between character set expressions, without
-;; assuming a small (Latin1) character set. The string parser is also
-;; extended to parse more constructions (hopefully) accurately,
-;; including POSIX character classes and various Emacs and Perl regexp
-;; assertions. Not all of SRE's abstract data type is implemented: in
-;; particular, regexps do not count their submatches.
+;; This code is partially based on Olin Shivers' reference SRE
+;; implementation in scsh: see scsh/re.scm, scsh/spencer.scm and
+;; scsh/posixstr.scm. In particular, it steals the idea of an abstract
+;; data type for regular expressions and the general structure of the
+;; string regexp parser and unparser. The data types for character
+;; sets are extended in order to support symbolic translation between
+;; character set expressions without assuming a small (Latin1)
+;; character set. The string parser is also extended to parse a bigger
+;; variety of constructions, including POSIX character classes and
+;; various Emacs and Perl regexp assertions. Otherwise, only the bare
+;; minimum of SRE's abstract data type is implemented: in particular,
+;; regexps do not count their submatches.
 ;;
 
 ;; BUGS:
@@ -93,7 +98,6 @@
 ;; - parse PCRE's /x syntax (with embedded spaces)
 ;; - PCRE \g{-n} ?
 ;; - many other things
-;; - generate PCRE syntax from RX
 
 (require 'cl)
 (require 'rx)
@@ -576,6 +580,8 @@ CSET may be an `rxt-char-set', an `rxt-syntax-class', or an
 
 
 ;;;; ADT unparser to PCRE notation
+;;; Based on scsh/posixstr.scm in scsh
+
 (defun rxt-adt->pcre (re)
   (multiple-value-bind (s lev) (rxt-adt->pcre/lev re) s))
 
