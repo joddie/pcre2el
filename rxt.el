@@ -938,8 +938,9 @@ in character classes as outside them."
 (defvar rxt-posix-classes
   (rx
    (: "[:"
-      (or "alnum" "alpha" "ascii" "blank" "cntrl" "digit" "graph" "lower"
-	  "print" "punct" "space" "upper" "word" "xdigit")
+      (submatch
+       (or "alnum" "alpha" "ascii" "blank" "cntrl" "digit" "graph" "lower"
+	   "print" "punct" "space" "upper" "word" "xdigit"))
       ":]")))
 
 (defun rxt-parse-char-class ()
