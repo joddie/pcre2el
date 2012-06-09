@@ -346,6 +346,12 @@ modified."
     (error "Can't adjoin non-rxt-char-set, character, range or symbol %S" item)))
   cset)
 
+(defun rxt-empty-char-set-p (cset)
+  (and (rxt-char-set-p cset)
+       (null (rxt-char-set-chars cset))
+       (null (rxt-char-set-ranges cset))
+       (null (rxt-char-set-classes cset))))
+
 ;;; Complement of a character set or syntax class
 (defstruct rxt-char-set-negation
   elt)					; rxt-char-set, 
@@ -398,8 +404,11 @@ CSET may be an `rxt-char-set', an `rxt-syntax-class', or an
 	(error "Can't take intersection of non-character-set %s" cset))))
     (if (null elts)
 	(rxt-negate cmpl)
-      (push (rxt-negate cmpl) elts)
-      (make-rxt-intersection :elts elts))))
+      (unless (rxt-empty-char-set-p cmpl)
+	(push (rxt-negate cmpl) elts))
+      (if (null (cdr elts))
+	  (car elts)			; singleton case
+	(make-rxt-intersection :elts elts)))))
 	
 ;; Constructor helper: flatten nested intersections
 (defun rxt-int-flatten (csets)
