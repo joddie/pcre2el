@@ -102,7 +102,6 @@
 ;; - PCRE quoting \Q ... \E doesn't work with quantifiers
 ;; - doesn't respect non-greediness of *?, +? and ??, though they exist
 ;;   both in PCRE and Elisp (but not in SRE or Rx)
-;; - doesn't parse multiple quantifiers after an atom, e.g. [0-9]{2}?
 ;; - presumably many others
 ;;
 ;; TODO:
@@ -874,21 +873,30 @@ CSET may be an `rxt-char-set', an `rxt-syntax-class', or an
 
 (defun rxt-parse-piece ()
   (let ((atom (rxt-parse-atom)))
-    (if (eobp)
-	atom
-      (rxt-token-case
-       ;; Should we try to do something better with non-greedy *?
-       ;; etc.?
-       ((rx (: "*" (opt "?"))) (rxt-repeat 0 nil atom))
-       ((rx (: "+" (opt "?"))) (rxt-repeat 1 nil atom))
-       ((rx (: "?" (opt "?"))) (rxt-repeat 0 1 atom))
+    (catch 'done
+      (while (not (eobp))
+	(let ((atom1 (rxt-parse-quantifier atom)))
+	  (if (eq atom1 atom)
+	      (throw 'done t)
+	    (setq atom atom1)))))
+    atom))
 
-       ((if rxt-parse-pcre "{" "\\\\{")
-	(multiple-value-bind (from to)
-	    (rxt-parse-braces)
-	  (rxt-repeat from to atom)))
+;; Possibly parse a quantifier after ATOM and return the quantified
+;; atom, or NIL
+(defun rxt-parse-quantifier (atom)
+  (rxt-token-case
+   ;; Should we try to do something better with non-greedy *?
+   ;; etc.?
+   ((rx (: "*" (opt "?"))) (rxt-repeat 0 nil atom))
+   ((rx (: "+" (opt "?"))) (rxt-repeat 1 nil atom))
+   ((rx (: "?" (opt "?"))) (rxt-repeat 0 1 atom))
 
-       (t atom)))))
+   ((if rxt-parse-pcre "{" "\\\\{")
+    (multiple-value-bind (from to)
+	(rxt-parse-braces)
+      (rxt-repeat from to atom)))
+
+   (t atom)))
 
 (defun rxt-parse-atom ()
   (if (eobp)
