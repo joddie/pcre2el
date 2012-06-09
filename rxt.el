@@ -1104,10 +1104,11 @@ in character classes as outside them."
 ;;; testing purposes only
 (defun rxt-test (re &optional pcre)
   (interactive "x")
-  (insert (format ";; %S\n" re))
-  (let ((rx (rxt-parse-re re pcre 'rx)))
-    (insert (format ";; %S\n\n" (rx-to-string rx t)))
-    (insert (format "%S\n\n\n" rx))))
+  (insert (format "%S\n" re))
+  (let ((adt (rxt-parse-re re pcre)))
+    (insert (format "%S\n\n" (rx-to-string (rxt-adt->rx adt) t)))
+    (insert (format "%s\n\n" (rxt-adt->pcre adt)))
+    (insert (format "%S\n\n\n" (rxt-adt->rx adt)))))
   
 (defun rxt-pcre-test (pcre)
   (interactive "s")
