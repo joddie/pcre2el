@@ -1141,15 +1141,27 @@ in character classes as outside them."
 
 
 ;;;; RE-Builder extensions from re-builder.el -- to be turned into advice
+(defun reb-update-modestring ()
+  "Update the variable `reb-mode-string' displayed in the mode line."
+  (setq reb-mode-string
+	(concat
+	 (format " (%s)" reb-re-syntax)
+	 (if reb-subexp-mode
+             (format " (subexp %s)" (or reb-subexp-displayed "-"))
+	   "")
+	 (if (not (reb-target-binding case-fold-search))
+	     " Case"
+	   "")))
+  (force-mode-line-update))
+
 (defun reb-change-syntax (&optional syntax)
   "Change the syntax used by the RE Builder.
 Optional argument SYNTAX must be specified if called non-interactively."
   (interactive
    (list (intern
-	  (completing-read "Select syntax: "
-			   (mapcar (lambda (el) (cons (symbol-name el) 1))
-				   '(read string pcre lisp-re sregex rx))
-			   nil t (symbol-name reb-re-syntax)))))
+	  (completing-read (format "Select syntax (%s): " reb-re-syntax)
+			   '("read" "string" "pcre" "sregex" "rx")
+			   nil t "" nil (symbol-name reb-re-syntax)))))
 
   (if (memq syntax '(read string pcre lisp-re sregex rx))
       (let ((buffer (get-buffer reb-buffer)))
