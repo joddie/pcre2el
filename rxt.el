@@ -74,6 +74,16 @@
 ;; non-modular manner to support (emulated) PCRE syntax and conversion
 ;; back and forth between PCRE, Elisp and rx syntax. (TODO: fix this.)
 ;;
+;; The more low-level functions are the parser `rxt-parse-re', which
+;; produces an abstract syntax tree from a string in Elisp or PCRE
+;; form, and the unparsers `rxt-adt->pcre', `rxt-adt->rx', and
+;; `rxt-adt->sre'. Finally, there is also a simple function to
+;; generate a list of all strings matched by a finite regexp (one with
+;; no unbounded quantifiers +, *, etc.): `rxt-elisp->strings' and
+;; `rxt-pcre->strings'. This could be useful if you have an expression
+;; produced by `regexp-opt' and want to get back the original set of
+;; strings.
+;;
 ;; This code is partially based on Olin Shivers' reference SRE
 ;; implementation in scsh: see scsh/re.scm, scsh/spencer.scm and
 ;; scsh/posixstr.scm. In particular, it steals the idea of an abstract
@@ -92,6 +102,7 @@
 ;; - PCRE quoting \Q ... \E doesn't work with quantifiers
 ;; - doesn't respect non-greediness of *?, +? and ??, though they exist
 ;;   both in PCRE and Elisp (but not in SRE or Rx)
+;; - doesn't parse multiple quantifiers after an atom, e.g. [0-9]{2}?
 ;; - presumably many others
 ;;
 ;; TODO:
@@ -742,8 +753,88 @@ CSET may be an `rxt-char-set', an `rxt-syntax-class', or an
 		      (format "[:%s:]" class))
 		  classes "")))))
 
+
+;;;; Generate all productions of a finite regexp
 
-	       
+(defun rxt-adt->strings (re)
+  (cond
+   ((rxt-primitive-p re) (list ""))
+
+   ((rxt-string-p re) (list (rxt-string-chars re)))
+   ((rxt-seq-p re) (rxt-seq-elts->strings (rxt-seq-elts re)))
+   ((rxt-choice-p re) (rxt-choice-elts->strings (rxt-choice-elts re)))
+
+   ((rxt-submatch-p re) (rxt-adt->strings (rxt-submatch-body re)))
+
+   ((rxt-repeat-p re) (rxt-repeat->strings re))
+
+   ((rxt-char-set-p re) (rxt-char-set->strings re))
+
+   (t
+    (error "Can't generate matches for %s" re))))
+
+(defun rxt-concat-product (heads tails)
+  (mapcan
+   (lambda (hs)
+     (mapcar
+      (lambda (ts) (concat hs ts))
+      tails))
+   heads))
+
+(defun rxt-seq-elts->strings (elts)
+  (if (null elts)
+      '("")
+    (let ((heads (rxt-adt->strings (car elts)))
+	  (tails (rxt-seq-elts->strings (cdr elts))))
+      (rxt-concat-product heads tails))))
+
+(defun rxt-choice-elts->strings (elts)
+  (if (null elts)
+      '()
+    (append (rxt-adt->strings (car elts))
+	    (rxt-choice-elts->strings (cdr elts)))))
+
+(defun rxt-repeat->strings (re)
+  (let ((from (rxt-repeat-from re))
+	(to (rxt-repeat-to re)))
+    (if (not to)
+	(error "Can't generate matches for unbounded repeat %s"
+	re)
+      (let ((strings (rxt-adt->strings (rxt-repeat-body re))))
+	(rxt-repeat-n-m->strings from to strings)))))
+
+(defun rxt-repeat-n-m->strings (from to strings)
+  (cond
+   ((zerop to) '(""))
+   ((= to from) (rxt-repeat-n->strings from strings))
+   (t 					; to > from
+    (let* ((strs-n (rxt-repeat-n->strings from strings))
+	   (accum (copy-list strs-n)))
+      (dotimes (i (- to from))
+	(setq strs-n (rxt-concat-product strs-n strings))
+	(setq accum (nconc accum strs-n)))
+      accum))))
+	      
+(defun rxt-repeat-n->strings (n strings)
+  ;; n > 1
+  (cond ((zerop n) '(""))
+	((= n 1) strings)
+	(t
+	 (rxt-concat-product
+	  (rxt-repeat-n->strings (- n 1) strings)
+	  strings))))
+
+(defun rxt-char-set->strings (re)
+  (if (rxt-char-set-classes re)
+      (error "Can't generate matches for character classes")
+    (let ((chars (mapcar #'char-to-string (rxt-char-set-chars re))))
+      (dolist (range (rxt-char-set-ranges re))
+	(let ((end (cdr range)))
+	  (do ((i (car range) (+ i 1)))
+	      ((> i end))
+	    (push (char-to-string i) chars))))
+      chars)))
+	
   
 
 
@@ -1100,6 +1191,12 @@ in character classes as outside them."
 
 (defun rxt-elisp->pcre (el)
   (rxt-adt->pcre (rxt-parse-re el nil)))
+
+(defun rxt-pcre->strings (pcre)
+  (rxt-adt->strings (rxt-parse-re pcre t)))
+
+(defun rxt-elisp->strings (el)
+  (rxt-adt->strings (rxt-parse-re el nil)))
 
 ;;; testing purposes only
 (defun rxt-test (re &optional pcre)
