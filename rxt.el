@@ -140,28 +140,28 @@ value of FORMS. Returns `nil' if none of the CASES matches."
 
 ;;; Other primitives
 (defstruct (rxt-primitive
-	    (:constructor rxt-primitive (rx &optional (sre rx))))
-  rx sre)
+	    (:constructor rxt-primitive (pcre rx &optional (sre rx))))
+  pcre rx sre)
 
-(defvar rxt-bos (rxt-primitive 'bos))
-(defvar rxt-eos (rxt-primitive 'eos))
+(defvar rxt-bos (rxt-primitive "\\A" 'bos))
+(defvar rxt-eos (rxt-primitive "\\Z" 'eos))
 
-(defvar rxt-bol (rxt-primitive 'bol))
-(defvar rxt-eol (rxt-primitive 'eol))
+(defvar rxt-bol (rxt-primitive "^" 'bol))
+(defvar rxt-eol (rxt-primitive "$" 'eol))
 
-(defvar rxt-any (rxt-primitive 'nonl))
+(defvar rxt-any (rxt-primitive "." 'nonl))
 
-(defvar rxt-word-boundary (rxt-primitive 'word-boundary))
-(defvar rxt-not-word-boundary (rxt-primitive 'not-word-boundary))
+(defvar rxt-word-boundary (rxt-primitive "\\b" 'word-boundary))
+(defvar rxt-not-word-boundary (rxt-primitive "\\B" 'not-word-boundary))
 
-(defvar rxt-wordchar (rxt-primitive 'wordchar))
-(defvar rxt-not-wordchar (rxt-primitive 'not-wordchar))
+(defvar rxt-wordchar (rxt-primitive "\\w" 'wordchar))
+(defvar rxt-not-wordchar (rxt-primitive "\\W" 'not-wordchar))
 
-(defvar rxt-symbol-start (rxt-primitive 'symbol-start))
-(defvar rxt-symbol-end (rxt-primitive 'symbol-end))
+(defvar rxt-symbol-start (rxt-primitive nil 'symbol-start))
+(defvar rxt-symbol-end (rxt-primitive nil 'symbol-end))
 
-(defvar rxt-bow (rxt-primitive 'bow))
-(defvar rxt-eow (rxt-primitive 'eow))
+(defvar rxt-bow (rxt-primitive nil 'bow))
+(defvar rxt-eow (rxt-primitive nil 'eow))
 
 
 ;;; Sequence
@@ -574,6 +574,164 @@ CSET may be an `rxt-char-set', an `rxt-syntax-class', or an
     (error "No SRE translation for %s" re))))
 
 
+
+;;;; ADT unparser to PCRE notation
+(defun rxt-adt->pcre (re)
+  (multiple-value-bind (s lev) (rxt-adt->pcre/lev re) s))
+
+(defun rxt-adt->pcre/lev (re)
+  (cond
+   ((rxt-primitive-p re)
+    (let ((s (rxt-primitive-pcre re)))
+      (if s
+	  (values s 1)
+	(error "No PCRE translation for %s" re))))
+
+   ((rxt-string-p re) (rxt-string->pcre re))
+   ((rxt-seq-p re) (rxt-seq->pcre re))
+   ((rxt-choice-p re) (rxt-choice->pcre re))
+
+   ((rxt-submatch-p re) (rxt-submatch->pcre re))
+
+   ((rxt-repeat-p re) (rxt-repeat->pcre re))
+
+   ((or (rxt-char-set-p re)
+	(rxt-char-set-negation-p re))
+    (rxt-char-set->pcre re))
+
+   ;; ((rxt-intersection re) (rxt-char-set-intersection->pcre re))
+
+   (t
+    (error "No PCRE translation for %s" re))))
+
+(defvar rxt-pcre-metachars (rx (any "\\^.$|()[]*+?{}")))
+(defvar rxt-pcre-charset-metachars (rx (any "]" "[" "\\" "^" "-")))
+
+;; levels: 0 = parenthesized; 1 = piece; 2 = branch; 3 = top
+(defun rxt-string->pcre (re)
+  (values
+   (replace-regexp-in-string
+    rxt-pcre-metachars
+    "\\\\\\&" (rxt-string-chars re))
+   2))
+
+(defun rxt-seq->pcre (re)
+  (let ((elts (rxt-seq-elts re)))
+    (if (null elts)
+	""
+      (rxt-seq-elts->pcre elts))))
+
+(defun rxt-seq-elts->pcre (elts)
+  (multiple-value-bind
+      (s lev) (rxt-adt->pcre/lev (car elts))
+    (if (null (cdr elts))
+	(values s lev)
+      (multiple-value-bind
+	  (s1 lev1) (rxt-seq-elts->pcre (cdr elts))
+	(values (concat (rxt-paren-if-necessary s lev)
+			(rxt-paren-if-necessary s1 lev1))
+		2)))))
+
+(defun rxt-paren-if-necessary (s lev)
+  (if (< lev 3)
+      s
+      (concat "(?:" s ")")))
+
+(defun rxt-choice->pcre (re)
+  (let ((elts (rxt-choice-elts re)))
+    (if (null elts)
+	nil
+      (rxt-choice-elts->pcre elts))))
+	
+(defun rxt-choice-elts->pcre (elts)
+  (multiple-value-bind
+      (s lev) (rxt-adt->pcre/lev (car elts))
+    (if (null (cdr elts))
+	(values s lev)
+      (multiple-value-bind
+	  (s1 lev1) (rxt-choice-elts->pcre (cdr elts))
+	(values (concat s "|" s1) 3)))))
+
+(defun rxt-submatch->pcre (re)
+  (multiple-value-bind
+      (s lev) (rxt-adt->pcre/lev (rxt-submatch-body re))
+    (values (concat "(" s ")") 0)))
+
+(defun rxt-repeat->pcre (re)
+  (let ((from (rxt-repeat-from re))
+	(to (rxt-repeat-to re))
+	(body (rxt-repeat-body re)))
+    (multiple-value-bind
+	(s lev) (rxt-adt->pcre/lev body)
+      (cond
+       ((and to (= from 1) (= to 1)) (values s lev))
+       ((and to (= from 0) (= to 0)) (values "" 2))
+       (t
+	(when (> lev 1)			; parenthesize non-atoms
+	  (setq s (concat "(?:" s ")")
+		lev 0))
+	(values (if to
+		    (cond ((and (= from 0) (= to 1)) (concat s "?"))
+			  ((= from to)
+			   (concat s "{" (number-to-string to) "}"))
+			  (t
+			   (concat s "{" (number-to-string from)
+					  "," (number-to-string to) "}")))
+		  (cond ((= from 0) (concat s "*"))
+			((= from 1) (concat s "+"))
+			(t (concat s "{" (number-to-string from) ",}"))))
+		1))))))
+	
+(defun rxt-char-set->pcre (re)
+  (cond ((rxt-char-set-p re)
+	 (values
+	  (concat "[" (rxt-char-set->pcre/chars re) "]") 1))
+
+	((rxt-char-set-negation-p re)
+	 (let ((elt (rxt-char-set-negation-elt re)))
+	   (if (rxt-char-set-p elt)
+	       (values
+		(concat "[^" (rxt-char-set->pcre/chars elt) "]") 1)
+	     (error "No PCRE translation of %s" elt))))
+
+	(t
+	 (error "Non-char-set in rxt-char-set->pcre: %s"))))
+	 
+;; Fortunately, easier in PCRE than in POSIX!
+(defun rxt-char-set->pcre/chars (re)
+  (flet
+      ((escape
+	(char)
+	(let ((s (char-to-string char)))
+	  (cond ((string-match rxt-pcre-charset-metachars s)
+		 (concat "\\" s))
+
+		((and (not (string= s " "))
+		      (string-match "[^[:graph:]]" s))
+		 (format "\\x{%x}" char))
+
+		(t s)))))
+
+    (let ((chars (rxt-char-set-chars re))
+	  (ranges (rxt-char-set-ranges re))
+	  (classes (rxt-char-set-classes re)))
+
+      (concat
+       (mapconcat #'escape chars "")
+       (mapconcat #'(lambda (rg)
+		      (format "%s-%s"
+			      (escape (car rg))
+			      (escape (cdr rg))))
+		  ranges "")
+       (mapconcat #'(lambda (class)
+		      (format "[:%s:]" class))
+		  classes "")))))
+
+
+	       
+  
+
+
 ;;;; String regexp -> ADT parser
 
 (defvar rxt-parse-pcre nil)
@@ -923,6 +1081,9 @@ in character classes as outside them."
 
 (defun rxt-pcre->elisp (pcre)
   (rx-to-string (rxt-pcre->rx pcre) t))
+
+(defun rxt-elisp->pcre (el)
+  (rxt-adt->pcre (rxt-parse-re el nil)))
 
 ;;; testing purposes only
 (defun rxt-test (re &optional pcre)
