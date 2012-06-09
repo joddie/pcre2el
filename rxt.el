@@ -1138,17 +1138,16 @@ Optional argument SYNTAX must be specified if called non-interactively."
   (if (memq syntax '(read string pcre lisp-re sregex rx))
       (let ((buffer (get-buffer reb-buffer)))
 	(setq reb-re-syntax syntax)
-	(with-current-buffer reb-target-buffer
-	  (case syntax
-	    ((rx)
-	     (setq reb-regexp-src
-		   (format "'%S"
-			   (rxt-elisp->rx reb-regexp))))
-	    ((pcre
-	      (setq reb-regexp-src "")))))
 	(when buffer
-          (with-current-buffer buffer
-	    
+          (with-current-buffer reb-target-buffer
+	    (case syntax
+	      ((rx)
+	       (setq reb-regexp-src
+		     (format "'%S"
+			     (rxt-elisp->rx reb-regexp))))
+	      ((pcre)
+	       (setq reb-regexp-src (rxt-elisp->pcre reb-regexp)))))
+	  (with-current-buffer buffer
             (reb-initialize-buffer))))
     (error "Invalid syntax: %s" syntax)))
 
@@ -1167,6 +1166,14 @@ Optional argument SYNTAX must be specified if called non-interactively."
 	     (re-search-backward "\"")
 	     (buffer-substring-no-properties beg (point))))
 
+	  ((eq reb-re-syntax 'pcre)
+	   (goto-char (point-min))
+	   (skip-syntax-forward "-")
+	   (let ((beg (point)))
+	     (goto-char (point-max))
+	     (skip-syntax-backward "-")
+	     (buffer-substring-no-properties beg (point))))
+
 	  ((or (reb-lisp-syntax-p) (eq reb-re-syntax 'pcre))
 	   (buffer-string)))))
 
@@ -1178,8 +1185,10 @@ Optional argument SYNTAX must be specified if called non-interactively."
   (cond ((eq reb-re-syntax 'read)
 	 (print re (current-buffer)))
 	((eq reb-re-syntax 'pcre)
-	 (insert (or (reb-target-binding reb-regexp-src)
-		     (reb-empty-regexp))))
+	 (insert "\n"
+		 (or (reb-target-binding reb-regexp-src)
+		     (reb-empty-regexp))
+		 "\n"))
 	((eq reb-re-syntax 'string)
 	 (insert "\n\"" re "\""))
 	;; For the Lisp syntax we need the "source" of the regexp
