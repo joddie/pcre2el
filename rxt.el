@@ -1012,8 +1012,11 @@ in character classes as outside them."
   (rxt-token-case
    ("\\\\a" #x07)  ; bell
    ("\\\\c\\(.\\)"                  ; control character
-    (- (string-to-char (upcase (match-string 1)))
-       64))
+    ;; from `man pcrepattern':
+    ;; The precise effect of \cx is as follows: if x is a lower case
+    ;; letter, it is converted to upper case.  Then bit 6 of the
+    ;; character (hex 40) is inverted.
+    (logxor (string-to-char (upcase (match-string 1))) #x40))
    ("\\\\e" #x1b)  ; escape
    ("\\\\f" #x0c)  ; formfeed
    ("\\\\n" #x0a)  ; linefeed
