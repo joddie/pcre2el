@@ -377,7 +377,7 @@ CSET may be an `rxt-char-set', an `rxt-syntax-class', or an
 	     (rxt-syntax-class-p cset))
 	 (make-rxt-char-set-negation :elt cset))
 
-	((or (integerp cset) (consp cset) (symbolp cset))
+	((or (integerp cset) (consp cset) (symbolp cset) (stringp cset))
 	 (make-rxt-char-set-negation
 	  :elt (rxt-char-set cset)))
 
