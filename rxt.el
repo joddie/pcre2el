@@ -1217,7 +1217,7 @@ in character classes as outside them."
 
 (defun rxt-pcre->sre (pcre)
   (interactive (rxt-interactive "PCRE regexp: "))
-  (rxt-val (rxt-parse-re pcre t 'sre)))
+  (rxt-value (rxt-parse-re pcre t 'sre)))
 
 (defun rxt-pcre->elisp (pcre)
   (interactive (rxt-interactive "PCRE regexp: "))
