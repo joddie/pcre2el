@@ -617,7 +617,9 @@ CSET may be an `rxt-char-set', an `rxt-syntax-class', or an
    ((rxt-choice-p re) (rxt-choice->pcre re))
 
    ((rxt-submatch-p re) (rxt-submatch->pcre re))
-
+   ((rxt-backref-p re)
+    (values (format "\\%d" (rxt-backref-n re)) 1))
+ 
    ((rxt-repeat-p re) (rxt-repeat->pcre re))
 
    ((or (rxt-char-set-p re)
