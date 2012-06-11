@@ -722,7 +722,7 @@ CSET may be an `rxt-char-set', an `rxt-syntax-class', or an
 	     (error "No PCRE translation of %s" elt))))
 
 	(t
-	 (error "Non-char-set in rxt-char-set->pcre: %s"))))
+	 (error "Non-char-set in rxt-char-set->pcre: %s" re))))
 	 
 ;; Fortunately, easier in PCRE than in POSIX!
 (defun rxt-char-set->pcre/chars (re)
