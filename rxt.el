@@ -1187,29 +1187,53 @@ in character classes as outside them."
 	  ((rx) (rxt-adt->rx parse))
 	  (t parse))))))
 
+(defmacro rxt-value (expr)
+  (let ((val (make-symbol "val"))
+	(str (make-symbol "str")))
+    `(let ((,val ,expr))
+       (if (called-interactively-p 'any)
+	   (let ((,str (format "%S" ,val)))
+	     (message "%s" ,str)
+	     (kill-new ,str))
+	 ,val))))
+
+(defun rxt-interactive (prompt)
+  (list
+   (if (use-region-p)
+       (buffer-substring-no-properties (region-beginning) (region-end))
+     (read-string prompt))))
+  
 (defun rxt-elisp->rx (el)
-  (rxt-parse-re el nil 'rx))
+  (interactive (rxt-interactive "Elisp regexp: "))
+  (rxt-value (rxt-parse-re el nil 'rx)))
 
 (defun rxt-elisp->sre (el)
-  (rxt-parse-re el nil 'sre))
+  (interactive (rxt-interactive "Elisp regexp: "))
+  (rxt-value (rxt-parse-re el nil 'sre)))
 
 (defun rxt-pcre->rx (pcre)
-  (rxt-parse-re pcre t 'rx))
+  (interactive (rxt-interactive "PCRE regexp: "))
+  (rxt-value (rxt-parse-re pcre t 'rx)))
 
 (defun rxt-pcre->sre (pcre)
-  (rxt-parse-re pcre t 'sre))
+  (interactive (rxt-interactive "PCRE regexp: "))
+  (rxt-val (rxt-parse-re pcre t 'sre)))
 
 (defun rxt-pcre->elisp (pcre)
-  (rx-to-string (rxt-pcre->rx pcre) t))
+  (interactive (rxt-interactive "PCRE regexp: "))
+  (rxt-value (rx-to-string (rxt-pcre->rx pcre) t)))
 
 (defun rxt-elisp->pcre (el)
-  (rxt-adt->pcre (rxt-parse-re el nil)))
+  (interactive (rxt-interactive "Elisp regexp: "))
+  (rxt-value (rxt-adt->pcre (rxt-parse-re el nil))))
 
 (defun rxt-pcre->strings (pcre)
-  (rxt-adt->strings (rxt-parse-re pcre t)))
+  (interactive (rxt-interactive "PCRE regexp: "))
+  (rxt-value (rxt-adt->strings (rxt-parse-re pcre t))))
 
 (defun rxt-elisp->strings (el)
-  (rxt-adt->strings (rxt-parse-re el nil)))
+  (interactive (rxt-interactive "Elisp regexp: "))
+  (rxt-value (rxt-adt->strings (rxt-parse-re el nil))))
 
 ;;; testing purposes only
 (defun rxt-test (re &optional pcre)
