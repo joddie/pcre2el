@@ -258,8 +258,8 @@ value of FORMS. Returns `nil' if none of the CASES matches."
 ;;; Repetition
 (defstruct
   (rxt-repeat
-   (:constructor rxt-repeat (from to body)))
-  from to body)
+   (:constructor rxt-repeat (from to body &optional (greedy t))))
+  from to body greedy)
 
 ;;; Submatch
 (defstruct
@@ -499,11 +499,15 @@ CSET may be an `rxt-char-set', an `rxt-syntax-class', or an
    ((rxt-repeat-p re)
     (let ((from (rxt-repeat-from re))
 	  (to (rxt-repeat-to re))
+          (greedy (rxt-repeat-greedy re))
 	  (body (rxt-adt->rx (rxt-repeat-body re))))
       (cond
-       ((and (zerop from) (null to)) (list '* body))
-       ((and (equal from 1) (null to)) (list '+ body))
-       ((and (zerop from) (equal to 1)) (list 'optional body))
+       ((and (zerop from) (null to))
+        (list (if greedy '* '*?) body))
+       ((and (equal from 1) (null to))
+        (list (if greedy '+ '+?) body))
+       ((and (zerop from) (equal to 1))
+        (list (if greedy 'opt '\??) body))
        ((null to) (list '>= from body))
        ((equal from to)
 	(list '= from body))
@@ -556,7 +560,10 @@ CSET may be an `rxt-char-set', an `rxt-syntax-class', or an
    ((rxt-repeat-p re)
     (let ((from (rxt-repeat-from re))
 	  (to (rxt-repeat-to re))
+          (greedy (rxt-repeat-greedy re))
 	  (body (rxt-adt->sre (rxt-repeat-body re))))
+      (when (not greedy)
+        (error "No SRE translation of non-greedy repetition %s" re))
       (cond
        ((and (zerop from) (null to)) (list '* body))
        ((and (equal from 1) (null to)) (list '+ body))
@@ -640,7 +647,9 @@ CSET may be an `rxt-char-set', an `rxt-syntax-class', or an
    (replace-regexp-in-string
     rxt-pcre-metachars
     "\\\\\\&" (rxt-string-chars re))
-   2))
+   ;; One-char strings are pieces (bind to quantifiers), longer are
+   ;; branches (need parenthesizing to be quantified)
+   (if (> (length re) 1) 1 2)))
 
 (defun rxt-seq->pcre (re)
   (let ((elts (rxt-seq-elts re)))
@@ -687,7 +696,8 @@ CSET may be an `rxt-char-set', an `rxt-syntax-class', or an
 (defun rxt-repeat->pcre (re)
   (let ((from (rxt-repeat-from re))
 	(to (rxt-repeat-to re))
-	(body (rxt-repeat-body re)))
+	(body (rxt-repeat-body re))
+        (greedy (rxt-repeat-greedy re)))
     (multiple-value-bind
 	(s lev) (rxt-adt->pcre/lev body)
       (cond
@@ -698,14 +708,17 @@ CSET may be an `rxt-char-set', an `rxt-syntax-class', or an
 	  (setq s (concat "(?:" s ")")
 		lev 0))
 	(values (if to
-		    (cond ((and (= from 0) (= to 1)) (concat s "?"))
+		    (cond ((and (= from 0) (= to 1))
+                           (concat s (if greedy "?" "??")))
 			  ((= from to)
 			   (concat s "{" (number-to-string to) "}"))
 			  (t
 			   (concat s "{" (number-to-string from)
 					  "," (number-to-string to) "}")))
-		  (cond ((= from 0) (concat s "*"))
-			((= from 1) (concat s "+"))
+		  (cond ((= from 0)
+                         (concat s (if greedy "*" "*?")))
+			((= from 1)
+                         (concat s (if greedy "+" "+?")))
 			(t (concat s "{" (number-to-string from) ",}"))))
 		1))))))
 	
@@ -887,11 +900,14 @@ CSET may be an `rxt-char-set', an `rxt-syntax-class', or an
 ;; atom, or NIL
 (defun rxt-parse-quantifier (atom)
   (rxt-token-case
-   ;; Should we try to do something better with non-greedy *?
-   ;; etc.?
-   ((rx (: "*" (opt "?"))) (rxt-repeat 0 nil atom))
-   ((rx (: "+" (opt "?"))) (rxt-repeat 1 nil atom))
-   ((rx (: "?" (opt "?"))) (rxt-repeat 0 1 atom))
+   ((rx "*?") (rxt-repeat 0 nil atom nil))
+   ((rx "*") (rxt-repeat 0 nil atom t))
+
+   ((rx "+?") (rxt-repeat 1 nil atom nil))
+   ((rx "+") (rxt-repeat 1 nil atom t))
+
+   ((rx "??") (rxt-repeat 0 1 atom nil))
+   ((rx "?") (rxt-repeat 0 1 atom t))
 
    ((if rxt-parse-pcre "{" "\\\\{")
     (multiple-value-bind (from to)
@@ -927,6 +943,8 @@ CSET may be an `rxt-char-set', an `rxt-syntax-class', or an
        ("\\\\'" rxt-eos)
        ("\\\\<" rxt-bow)
        ("\\\\>" rxt-eow)
+       ("\\\\_<" rxt-symbol-start)
+       ("\\\\_>" rxt-symbol-end)
 
        ;; Syntax categories
        ((rx (: "\\"
@@ -1055,12 +1073,11 @@ in character classes as outside them."
 
 ;; Parse a character set range [...]		 
 (defvar rxt-posix-classes
-  (rx
-   (: "[:"
+  (rx "[:"
       (submatch
        (or "alnum" "alpha" "ascii" "blank" "cntrl" "digit" "graph" "lower"
-	   "print" "punct" "space" "upper" "word" "xdigit"))
-      ":]")))
+           "print" "punct" "space" "upper" "word" "xdigit"))
+      ":]"))
 
 (defun rxt-parse-char-class ()
  (when (eobp)
