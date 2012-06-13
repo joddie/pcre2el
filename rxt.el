@@ -99,8 +99,7 @@
 ;;
 
 ;; BUGS:
-;; - PCRE quoting \Q ... \E doesn't work with quantifiers
-;; - presumably many others
+;; There are sure to be some.
 ;;
 ;; TODO:
 ;; - parse PCRE's /x syntax (with embedded spaces)
@@ -909,32 +908,36 @@ or a shorthand char-set specifier (see `rxt-char-set')`."
 (defun rxt-parse-branch ()
   (let ((stop
 	 (regexp-opt
-	  (if rxt-parse-pcre '("|" ")") '("\\|" "\\)"))))
-	(pieces '()))
-    (catch 'done
-      (while t
-	(if (not (eobp))
-	    (let ((piece
-		   (if (looking-at stop)
-		       rxt-empty-string
-		     (rxt-parse-piece))))
-	      (setq pieces (cons piece pieces))
-	      (if (looking-at stop)
-		  (throw 'done (rxt-seq (reverse pieces)))))
-	  (throw 'done (rxt-seq (reverse pieces))))))))
+	  (if rxt-parse-pcre '("|" ")") '("\\|" "\\)")))))
+    (if (or (eobp)
+            (looking-at stop))
+        rxt-empty-string
+      (let ((pieces (list (rxt-parse-piece t))))
+        (while (not (or (eobp)
+                        (looking-at stop)))
+          (let ((piece (rxt-parse-piece nil)))
+            (push piece pieces)))
+        (rxt-seq (reverse pieces))))))
 
-(defun rxt-parse-piece ()
-  (let ((atom (rxt-parse-atom)))
-    (catch 'done
-      (while (not (eobp))
-	(let ((atom1 (rxt-parse-quantifier atom)))
-	  (if (eq atom1 atom)
-	      (throw 'done t)
-	    (setq atom atom1)))))
-    atom))
+;; Parse a regexp "piece": an atom (`rxt-parse-atom') plus any
+;; following quantifiers
+(defun rxt-parse-piece (&optional branch-begin)
+  (let ((atom (rxt-parse-atom branch-begin)))
+    (rxt-parse-quantifiers atom)))
 
-;; Possibly parse a quantifier after ATOM and return the quantified
-;; atom, or NIL
+;; Parse any and all quantifiers after ATOM and return the quantified
+;; regexp, or ATOM unchanged if no quantifiers
+(defun rxt-parse-quantifiers (atom)
+  (catch 'done
+    (while (not (eobp))
+      (let ((atom1 (rxt-parse-quantifier atom)))
+        (if (eq atom1 atom)
+            (throw 'done t)
+          (setq atom atom1)))))
+  atom)
+
+;; Possibly parse a single quantifier after ATOM and return the
+;; quantified atom, or ATOM if no quantifier
 (defun rxt-parse-quantifier (atom)
   (rxt-token-case
    ((rx "*?") (rxt-repeat 0 nil atom nil))
@@ -953,17 +956,18 @@ or a shorthand char-set specifier (see `rxt-char-set')`."
 
    (t atom)))
 
-(defun rxt-parse-atom ()
+;; Parse a regexp atom, i.e. an element that binds to any following
+;; quantifiers. This includes characters, character classes,
+;; parenthesized groups, assertions, etc.
+(defun rxt-parse-atom (&optional branch-begin)
   (if (eobp)
       (error "Unexpected end of regular expression")
     (if rxt-parse-pcre
 	(rxt-parse-atom/pcre)
-      (rxt-parse-atom/el))))
+      (rxt-parse-atom/el branch-begin))))
 
 (defun rxt-parse-atom/common ()
   (rxt-token-case
-   ("\\^" rxt-bol)
-   ("\\$" rxt-eol)
    ("\\." rxt-any)
    ("\\[" (rxt-parse-char-class))
    ("\\\\w" rxt-wordchar)
@@ -971,9 +975,19 @@ or a shorthand char-set specifier (see `rxt-char-set')`."
    ("\\\\b" rxt-word-boundary)
    ("\\\\B" rxt-not-word-boundary)))
 
-(defun rxt-parse-atom/el ()
+(defun rxt-parse-atom/el (branch-begin)
   (or (rxt-parse-atom/common)
       (rxt-token-case
+       ;; "^" and "$" are metacharacters only at beginning or end of a
+       ;; branch in Elisp; elsewhere they are literals
+       ("\\^" (if branch-begin
+                  rxt-bol
+                (rxt-string "^")))
+       ("\\$" (if (or (eobp)
+                      (looking-at (rx (or "\\)" "\\|"))))
+                  rxt-eol
+                (rxt-string "$")))
+
        ("\\\\(" (rxt-parse-subgroup "\\\\)")) ; Subgroup
    
        ("\\\\`" rxt-bos)
@@ -1026,15 +1040,26 @@ or a shorthand char-set specifier (see `rxt-char-set')`."
 	     (rxt-string (char-to-string char))))
 
       (rxt-token-case
+       ("\\^" rxt-bol)
+       ("\\$" rxt-eol)
+
        ("(" (rxt-parse-subgroup ")")) ; Subgroup
        
        ("\\\\A" rxt-bos)
        ("\\\\Z" rxt-eos)
 
-       ("\\\\Q"				; begin regexp quoting: FIXME
+       ("\\\\Q"				; begin regexp quoting
+        ;; It would seem simple to take all the characters between \Q
+        ;; and \E and make an rxt-string, but \Q...\E isn't an atom:
+        ;; any quantifiers afterward should bind only to the last
+        ;; character, not the whole string.
 	(let ((begin (point)))
 	  (search-forward "\\E" nil t)
-	  (rxt-parse-atom/pcre)))
+          (let* ((end (match-beginning 0))
+                 (str (buffer-substring-no-properties begin (1- end)))
+                 (char (char-to-string (char-before end))))
+            (rxt-seq (list (rxt-string str)
+                           (rxt-parse-quantifiers (rxt-string char)))))))
        
        ;; Various character classes
        ("\\\\d" (rxt-char-set 'digit))
