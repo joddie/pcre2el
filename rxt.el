@@ -281,6 +281,15 @@ value of FORMS. Returns `nil' if none of the CASES matches."
       (make-rxt-syntax-class :symbol symbol)
     (error "Invalid syntax class symbol %s" symbol)))
 
+;;; Character categories (Emacs only)
+(defstruct rxt-char-category
+  symbol)
+
+(defun rxt-char-category (symbol)
+  (if (assoc symbol rx-categories)
+      (make-rxt-char-category :symbol symbol)
+    (error "Invalid character category symbol %s" symbol)))
+
 
 ;;; Char sets
 ;; char set ::= <re-char-set> 
@@ -364,19 +373,25 @@ modified."
        (null (rxt-char-set-ranges cset))
        (null (rxt-char-set-classes cset))))
 
-;;; Complement of a character set or syntax class
+;;; Set complement of character set, syntax class, or character
+;;; category
+
+;; In general, all character sets that can be represented in string
+;; notation as [^ ... ] (but see `rxt-intersection', below), plus
+;; Emacs' \Sx and \Cx constructions. 
 (defstruct rxt-char-set-negation
-  elt)					; rxt-char-set, 
+  elt)
 
-;; Negation 
+;; Complement constructor: checks types, unwraps existing negations
 (defun rxt-negate (cset)
-  "Return the negation of character set CSET.
+  "Return the logical complement (negation) of CSET.
 
-CSET may be an `rxt-char-set', an `rxt-syntax-class', or an
-`rxt-char-set-negation'; or a shorthand form of an rxt-char-set."
-
+CSET may be one of the following types: `rxt-char-set',
+`rxt-syntax-class', `rxt-char-category', `rxt-char-set-negation';
+or a shorthand char-set specifier (see `rxt-char-set')`."
   (cond ((or (rxt-char-set-p cset)
-	     (rxt-syntax-class-p cset))
+	     (rxt-syntax-class-p cset)
+             (rxt-char-category-p cset))
 	 (make-rxt-char-set-negation :elt cset))
 
 	((or (integerp cset) (consp cset) (symbolp cset) (stringp cset))
@@ -497,6 +512,9 @@ CSET may be an `rxt-char-set', an `rxt-syntax-class', or an
 
    ((rxt-syntax-class-p re)
     (list 'syntax (rxt-syntax-class-symbol re)))
+
+   ((rxt-char-category-p re)
+    (list 'category (rxt-char-category-symbol re)))
 
    ((rxt-repeat-p re)
     (let ((from (rxt-repeat-from re))
@@ -975,6 +993,19 @@ CSET may be an `rxt-char-set', an `rxt-syntax-class', or an
 		(car (rassoc (string-to-char (match-string 2))
 			     rx-syntax)))))
 	  (if negated (rxt-negate re) re)))
+
+       ;; Character categories
+       ((rx "\\"
+            (submatch (any "Cc"))
+            (submatch nonl))
+        (let ((negated (string= (match-string 1) "C"))
+              (category
+               (car (rassoc (string-to-char (match-string 2))
+                            rx-categories))))
+          (unless category
+            (error "Unrecognized character category %s" (match-string 2)))
+          (let ((re (rxt-char-category category)))
+            (if negated (rxt-negate re) re))))
 
        ("\\\\\\([1-9]\\)"			; Backreference
 	(rxt-backref (string-to-number (match-string 1))))
