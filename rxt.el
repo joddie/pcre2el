@@ -5,7 +5,7 @@
 ;;
 ;; Author:			j.j.oddie at gmail.com
 ;; Created:			4 June 2012
-;; Updated:			9 June 2012
+;; Updated:			13 June 2012
 
 ;; This file is NOT part of GNU Emacs.
 
@@ -100,13 +100,12 @@
 
 ;; BUGS:
 ;; - PCRE quoting \Q ... \E doesn't work with quantifiers
-;; - doesn't respect non-greediness of *?, +? and ??, though they exist
-;;   both in PCRE and Elisp (but not in SRE or Rx)
 ;; - presumably many others
 ;;
 ;; TODO:
 ;; - parse PCRE's /x syntax (with embedded spaces)
 ;; - PCRE \g{-n} ?
+;; - PCREs in isearch mode
 ;; - many other things
 
 (require 'cl)
@@ -289,9 +288,11 @@ value of FORMS. Returns `nil' if none of the CASES matches."
 ;;            | <re-choice> ; where all rxt-choice-elts are char sets
 ;;            | <re-char-set-intersection>
 
-;; an rxt-char-set represents the union of any number of characters,
-;; character ranges, and POSIX character classes
-(defstruct rxt-char-set			; (| cse ...) or (~ cse ...)
+;; An rxt-char-set represents the union of any number of characters,
+;; character ranges, and POSIX character classes: anything that can be
+;; represented in string notation as a class [ ... ] without the
+;; negation operator.
+(defstruct rxt-char-set
   chars					; list of single characters
   ranges				; list of ranges (from . to)
   classes)				; list of character classes
@@ -301,7 +302,7 @@ value of FORMS. Returns `nil' if none of the CASES matches."
 
 ITEM may be a single character, a string or list of characters, a
 range represented as a cons (FROM . TO), a symbol representing a
-POSIX class, or an existing character set which is returned
+POSIX class, or an existing character set, which is returned
 unchanged."
   (cond
    ((rxt-cset-p item) item)
@@ -327,11 +328,12 @@ unchanged."
 (defun rxt-char-set-adjoin! (cset item)
   "Destructively add the contents of ITEM to character set CSET.
 
-CSET must be an rxt-char-set. ITEM may also be an rxt-char-set,
-or it can be any of these shortcut representations: a character,
-range, or a posix class symbol.
+CSET must be an rxt-char-set. ITEM may be an rxt-char-set, or any
+of these shortcut representations: a single character which
+stands for itself, a cons (FROM . TO) representing a range, or a
+symbol naming a posix class: 'digit, 'alnum, etc.
 
-The union of CSET and ITEM is returned; CSET may be destructively
+Returns the union of CSET and ITEM; CSET may be destructively
 modified."
   (assert (rxt-char-set-p cset))
 
@@ -431,8 +433,8 @@ CSET may be an `rxt-char-set', an `rxt-syntax-class', or an
     '()))
 	  
 ;;; Higher-level character set combinations: intersection and union
-;; Here a cset may be: rxt-char-set, rxt-char-set-negation,
-;; rxt-intersection, or rxt-choice (where all elts are csets)
+;; Here a cset may be an `rxt-char-set', `rxt-char-set-negation',
+;; `rxt-intersection', or `rxt-choice' whose elements are all csets
 (defun rxt-cset-p (cset)
   (or (rxt-char-set-p cset)
       (rxt-char-set-negation-p cset)
@@ -445,7 +447,7 @@ CSET may be an `rxt-char-set', an `rxt-syntax-class', or an
     (dolist (cset csets)
       (if (rxt-choice-p union)
 	  (setq union (rxt-choice (list union cset)))
-	;; else, union is a char-set
+	;; else, `union' is a char-set
 	(cond
 	 ((rxt-char-set-p cset)
 	  (setq union (rxt-char-set-adjoin! union cset)))
@@ -608,6 +610,24 @@ CSET may be an `rxt-char-set', an `rxt-syntax-class', or an
 ;;;; ADT unparser to PCRE notation
 ;;; Based on scsh/posixstr.scm in scsh
 
+;; To ensure that the operator precedence in the generated regexp does
+;; what we want, we need to keep track of what kind of production is
+;; returned from each step. Therefore these functions return a string
+;; and a numeric "level" which lets the function using the generated
+;; regexp know whether it has to be parenthesized:
+;;
+;; 0: an already parenthesized expression
+;;
+;; 1: a "piece" binds to any succeeding quantifiers
+;;
+;; 2: a "branch", or concatenation of pieces, needs parenthesizing to
+;; bind to quantifiers
+;;
+;; 3: a "top", or alternation of branches, needs parenthesizing to
+;; bind to quantifiers or to concatenation
+;;
+;; This idea is stolen straight out of the scsh implementation.
+
 (defun rxt-adt->pcre (re)
   (multiple-value-bind (s lev) (rxt-adt->pcre/lev re) s))
 
@@ -641,7 +661,6 @@ CSET may be an `rxt-char-set', an `rxt-syntax-class', or an
 (defvar rxt-pcre-metachars (rx (any "\\^.$|()[]*+?{}")))
 (defvar rxt-pcre-charset-metachars (rx (any "]" "[" "\\" "^" "-")))
 
-;; levels: 0 = parenthesized; 1 = piece; 2 = branch; 3 = top
 (defun rxt-string->pcre (re)
   (values
    (replace-regexp-in-string
@@ -947,9 +966,9 @@ CSET may be an `rxt-char-set', an `rxt-syntax-class', or an
        ("\\\\_>" rxt-symbol-end)
 
        ;; Syntax categories
-       ((rx (: "\\"
-	       (submatch (any "Ss"))
-	       (submatch (any "-.w_()'\"$\\/<>|!"))))
+       ((rx "\\"
+            (submatch (any "Ss"))
+            (submatch (any "-.w_()'\"$\\/<>|!")))
 	(let ((negated (string= (match-string 1) "S"))
 	      (re
 	       (rxt-syntax-class
