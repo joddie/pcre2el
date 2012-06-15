@@ -222,8 +222,10 @@ value of FORMS. Returns `nil' if none of the CASES matches."
 ;; The empty choice (always fails)
 (defvar rxt-empty (make-rxt-choice nil))
 (defun rxt-empty-p (re)
-  (and (rxt-choice-p re)
-       (null (rxt-choice-elts re))))
+  (or
+   (and (rxt-choice-p re)
+        (null (rxt-choice-elts re)))
+   (rxt-empty-char-set-p re)))
   
 ;; Constructor
 (defun rxt-choice (res)
