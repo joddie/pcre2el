@@ -509,7 +509,10 @@ or a shorthand char-set specifier (see `rxt-char-set')`."
       (list 'submatch (rxt-adt->rx (rxt-submatch-body re)))))
 
    ((rxt-backref-p re)
-    (list 'backref (rxt-backref-n re)))
+    (let ((n (rxt-backref-n re)))
+      (if (<= n 9)
+          (list 'backref (rxt-backref-n re))
+        (error "Too many backreferences (%s)" n))))
 
    ((rxt-syntax-class-p re)
     (list 'syntax (rxt-syntax-class-symbol re)))
