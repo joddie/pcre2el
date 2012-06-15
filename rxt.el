@@ -541,7 +541,7 @@ or a shorthand char-set specifier (see `rxt-char-set')`."
       (append
        '(any)
        (and (rxt-char-set-chars re)
-	    (list (mapconcat 'char-to-string (rxt-char-set-chars re) "")))
+	    (mapcar 'char-to-string (rxt-char-set-chars re)))
 
        (mapcar
 	(lambda (range)
