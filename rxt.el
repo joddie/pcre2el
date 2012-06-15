@@ -892,7 +892,18 @@ or a shorthand char-set specifier (see `rxt-char-set')`."
 
 ;;;; String regexp -> ADT parser
 
-(defvar rxt-parse-pcre nil)
+(defvar rxt-parse-pcre nil
+  "t if the rxt string parser is parsing PCRE syntax, nil for Elisp syntax.
+
+This should only be let-bound by `rxt-parse-re', never set otherwise.")
+
+(defvar rxt-pcre-extended-mode nil
+  "t if the rxt string parser is emulating PCRE's \"extended\" mode.
+
+In extended mode (indicated by /x in Perl/PCRE), whitespace
+outside of character classes and \\Q...\\E quoting is ignored,
+and a `#' character introduces a comment that extends to the end
+of line.")
 
 (defun rxt-parse-exp ()
   (let ((bar (regexp-quote (if rxt-parse-pcre "|" "\\|"))))
@@ -902,15 +913,25 @@ or a shorthand char-set specifier (see `rxt-char-set')`."
 	    (while t
 	      (let ((branch (rxt-parse-branch)))
 		(setq branches (cons branch branches))
+                (rxt-extended-skip)
 		(if (looking-at bar)
 		    (goto-char (match-end 0))
 		  (throw 'done (rxt-choice (reverse branches))))))))
       (rxt-choice nil))))
 
+(defun rxt-extended-skip ()
+  "Skip over whitespace and comments in PCRE extended regexps."
+  (when rxt-pcre-extended-mode
+    (skip-syntax-forward "-")
+    (while (looking-at "#")
+      (beginning-of-line 2)
+      (skip-syntax-forward "-"))))
+
 (defun rxt-parse-branch ()
   (let ((stop
 	 (regexp-opt
 	  (if rxt-parse-pcre '("|" ")") '("\\|" "\\)")))))
+    (rxt-extended-skip)
     (if (or (eobp)
             (looking-at stop))
         rxt-empty-string
@@ -924,6 +945,7 @@ or a shorthand char-set specifier (see `rxt-char-set')`."
 ;; Parse a regexp "piece": an atom (`rxt-parse-atom') plus any
 ;; following quantifiers
 (defun rxt-parse-piece (&optional branch-begin)
+  (rxt-extended-skip)
   (let ((atom (rxt-parse-atom branch-begin)))
     (rxt-parse-quantifiers atom)))
 
@@ -941,6 +963,7 @@ or a shorthand char-set specifier (see `rxt-char-set')`."
 ;; Possibly parse a single quantifier after ATOM and return the
 ;; quantified atom, or ATOM if no quantifier
 (defun rxt-parse-quantifier (atom)
+  (rxt-extended-skip)
   (rxt-token-case
    ((rx "*?") (rxt-repeat 0 nil atom nil))
    ((rx "*") (rxt-repeat 0 nil atom t))
@@ -990,7 +1013,7 @@ or a shorthand char-set specifier (see `rxt-char-set')`."
                   rxt-eol
                 (rxt-string "$")))
 
-       ("\\\\(" (rxt-parse-subgroup "\\\\)")) ; Subgroup
+       ("\\\\(" (rxt-parse-subgroup/el)) ; Subgroup
    
        ("\\\\`" rxt-bos)
        ("\\\\'" rxt-eos)
@@ -1035,6 +1058,7 @@ or a shorthand char-set specifier (see `rxt-char-set')`."
 (defvar rxt-subgroup-count nil)
 
 (defun rxt-parse-atom/pcre ()
+  (rxt-extended-skip)
   (or (rxt-parse-atom/common)
 
       (let ((char (rxt-parse-escapes/pcre)))
@@ -1045,7 +1069,7 @@ or a shorthand char-set specifier (see `rxt-char-set')`."
        ("\\^" rxt-bol)
        ("\\$" rxt-eol)
 
-       ("(" (rxt-parse-subgroup ")")) ; Subgroup
+       ("(" (rxt-parse-subgroup/pcre)) ; Subgroup
        
        ("\\\\A" rxt-bos)
        ("\\\\Z" rxt-eos)
@@ -1123,12 +1147,37 @@ in character classes as outside them."
    ("\\\\x{\\([A-Za-z0-9]*\\)}"
     (string-to-number (match-string 1) 16))))
 
-(defun rxt-parse-subgroup (close)
-  (incf rxt-subgroup-count)
-  (let ((shy (looking-at "\\?:")))
-    (when shy (forward-char 2))
+(defun rxt-parse-subgroup/pcre ()
+  (catch 'return 
+    (let ((shy nil))
+      (rxt-extended-skip)
+      (rxt-token-case
+       ((rx "?")                        ; Special constructs: (? ... )
+        (rxt-token-case
+         (":" (setq shy t))             ; Shy group (?: ...)
+         ("#"                           ; Comment (?# ...)
+          (search-forward ")")
+          (throw 'return rxt-trivial))
+         (t (error "Unrecognized PCRE extended construction ?%c"
+                   (char-after)))))
+       ((rx "*")                ; None of these are recognized: (* ..)
+        (let ((begin (point)))
+          (search-forward ")")
+          (error "Unrecognized PCRE extended construction (*%s"
+                 (buffer-substring begin (point))))))
+      (unless shy (incf rxt-subgroup-count))
+      (let ((rx (rxt-parse-exp)))
+        (rxt-extended-skip)
+        (if (not (looking-at ")"))
+            (error "Subexpression missing close paren")
+          (goto-char (match-end 0))
+          (if shy rx (rxt-submatch rx)))))))
+
+(defun rxt-parse-subgroup/el ()
+  (let ((shy (rxt-token-case ("\\?:" t))))
+    (unless shy (incf rxt-subgroup-count))
     (let ((rx (rxt-parse-exp)))
-      (if (not (looking-at close))
+      (if (not (looking-at (rx "\\)")))
 	  (error "Subexpression missing close paren")
 	(goto-char (match-end 0))
 	(if shy rx (rxt-submatch rx))))))
