@@ -1111,8 +1111,9 @@ of line.")
 	  ;; there have been at least that many previous capturing left
 	  ;; parentheses in the expression, the entire sequence is taken
 	  ;; as a back reference.
-	  (if (or (< dec 10)
-		  (>= rxt-subgroup-count dec))
+	  (if (and (> dec 0)
+                   (or (< dec 10)
+                       (>= rxt-subgroup-count dec)))
 	      (rxt-backref dec)
 	
 	    ;; from "man pcrepattern": if the decimal number is greater
