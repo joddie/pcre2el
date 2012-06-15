@@ -256,10 +256,14 @@ value of FORMS. Returns `nil' if none of the CASES matches."
     '()))
 
 ;;; Repetition
-(defstruct
-  (rxt-repeat
-   (:constructor rxt-repeat (from to body &optional (greedy t))))
+(defstruct rxt-repeat
   from to body greedy)
+
+(defun* rxt-repeat (from to body &optional (greedy t))
+  (if (equal to 0)
+      rxt-empty-string
+    (make-rxt-repeat :from from :to to
+                     :body body :greedy greedy)))
 
 ;;; Submatch
 (defstruct
