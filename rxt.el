@@ -1145,7 +1145,7 @@ in character classes as outside them."
    ("\\\\r" #x0d)  ; carriage return
    ("\\\\t" #x09)  ; tab
    
-   ("\\\\x\\([A-Za-z0-9]\\{2\\}\\)"
+   ("\\\\x\\([A-Za-z0-9]\\{1,2\\}\\)"
     (string-to-number (match-string 1) 16))
    ("\\\\x{\\([A-Za-z0-9]*\\)}"
     (string-to-number (match-string 1) 16))))
