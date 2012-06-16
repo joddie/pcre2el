@@ -1014,8 +1014,6 @@ otherwise it would not match.")
 (defun rxt-parse-atom/common ()
   (rxt-token-case 
    ("\\[" (rxt-parse-char-class))
-   ("\\\\w" rxt-wordchar)
-   ("\\\\W" rxt-not-wordchar)
    ("\\\\b" rxt-word-boundary)
    ("\\\\B" rxt-not-word-boundary)))
 
@@ -1036,6 +1034,9 @@ otherwise it would not match.")
 
        ("\\\\(" (rxt-parse-subgroup/el)) ; Subgroup
    
+       ("\\\\w" rxt-wordchar)
+       ("\\\\W" rxt-not-wordchar)
+
        ("\\\\`" rxt-bos)
        ("\\\\'" rxt-eos)
        ("\\\\<" rxt-bow)
@@ -1078,6 +1079,13 @@ otherwise it would not match.")
 
 (defvar rxt-subgroup-count nil)
 
+(defvar rxt-pcre-word-chars
+  (make-rxt-char-set :chars '(?_)
+                     :classes '(alnum)))
+
+(defvar rxt-pcre-non-word-chars
+  (rxt-negate rxt-pcre-word-chars))
+
 (defun rxt-parse-atom/pcre ()
   (rxt-extended-skip)
   (or (rxt-parse-atom/common)
@@ -1099,6 +1107,9 @@ otherwise it would not match.")
        
        ("\\\\A" rxt-bos)
        ("\\\\Z" rxt-eos)
+
+       ("\\\\w" rxt-pcre-word-chars)
+       ("\\\\W" rxt-pcre-non-word-chars)
 
        ("\\\\Q"				; begin regexp quoting
         ;; It would seem simple to take all the characters between \Q
@@ -1350,8 +1361,11 @@ in character classes as outside them."
        ("\\\\v" (rxt-char-set pcre-vertical-whitespace-chars))
        ("\\\\V" (rxt-negate pcre-vertical-whitespace-chars))
 
-       ("\\\\w" 'word)
-       ("\\\\W" (rxt-negate 'word))
+       ("\\\\w" rxt-pcre-word-chars)
+       ("\\\\W" rxt-pcre-non-word-chars)
+
+       ;; \b inside character classes = backspace
+       ("\\\\b" ?\C-h)
 
        ;; Ignore other escapes
        ("\\\\\\(.\\)" (string-to-char (match-string 1))))))
