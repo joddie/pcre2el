@@ -99,11 +99,14 @@
 ;;
 
 ;; BUGS:
-;; There are sure to be some.
+;;
+;; - Although the string parser tries to interpret PCRE's octal and
+;;   hexadecimal escapes correctly, there are problems with matching
+;;   non-ASCII chars that I don't use enough to properly understand:
+;;   e.g., (string-match-p (rxt-pcre->rx "\\377") "\377") => nil
 ;;
 ;; TODO:
-;; - parse PCRE's /x syntax (with embedded spaces)
-;; - PCRE \g{-n} ?
+;; - PCRE \g{...}
 ;; - PCREs in isearch mode
 ;; - many other things
 
@@ -161,7 +164,9 @@ value of FORMS. Returns `nil' if none of the CASES matches."
 (defvar rxt-bol (rxt-primitive "^" 'bol))
 (defvar rxt-eol (rxt-primitive "$" 'eol))
 
-(defvar rxt-any (rxt-primitive "." 'nonl))
+;; FIXME
+(defvar rxt-anything (rxt-primitive "." 'anything))
+(defvar rxt-nonl (rxt-primitive "." 'nonl))
 
 (defvar rxt-word-boundary (rxt-primitive "\\b" 'word-boundary))
 (defvar rxt-not-word-boundary (rxt-primitive "\\B" 'not-word-boundary))
@@ -912,8 +917,16 @@ outside of character classes and \\Q...\\E quoting is ignored,
 and a `#' character introduces a comment that extends to the end
 of line.")
 
+(defvar rxt-pcre-s-mode nil
+  "t if the rxt string parser is emulating PCRE's single-line \"/s\" mode.
+
+When /s is used, PCRE's \".\" matches newline characters, which
+otherwise it would not match.")
+
 (defun rxt-parse-exp ()
-  (let ((bar (regexp-quote (if rxt-parse-pcre "|" "\\|"))))
+  (let ((rxt-pcre-extended-mode rxt-pcre-extended-mode)
+        (rxt-pcre-s-mode rxt-pcre-s-mode)
+        (bar (regexp-quote (if rxt-parse-pcre "|" "\\|"))))
     (if (not (eobp))
 	(let ((branches '()))
 	  (catch 'done
@@ -999,8 +1012,7 @@ of line.")
       (rxt-parse-atom/el branch-begin))))
 
 (defun rxt-parse-atom/common ()
-  (rxt-token-case
-   ("\\." rxt-any)
+  (rxt-token-case 
    ("\\[" (rxt-parse-char-class))
    ("\\\\w" rxt-wordchar)
    ("\\\\W" rxt-not-wordchar)
@@ -1010,6 +1022,8 @@ of line.")
 (defun rxt-parse-atom/el (branch-begin)
   (or (rxt-parse-atom/common)
       (rxt-token-case
+       ("\\." rxt-nonl)
+
        ;; "^" and "$" are metacharacters only at beginning or end of a
        ;; branch in Elisp; elsewhere they are literals
        ("\\^" (if branch-begin
@@ -1073,6 +1087,11 @@ of line.")
 	     (rxt-string (char-to-string char))))
 
       (rxt-token-case
+       ("\\."
+        (if rxt-pcre-s-mode
+            rxt-anything
+          rxt-nonl))
+
        ("\\^" rxt-bol)
        ("\\$" rxt-eol)
 
@@ -1155,40 +1174,74 @@ in character classes as outside them."
    ("\\\\x{\\([A-Za-z0-9]*\\)}"
     (string-to-number (match-string 1) 16))))
 
+(defun rxt-extended-flag (flags)
+  (if (string-match-p "x" flags) t nil))
+
+(defun rxt-s-flag (flags)
+  (if (string-match-p "s" flags) t nil))
+
 (defun rxt-parse-subgroup/pcre ()
   (catch 'return 
-    (let ((shy nil))
+    (let ((shy nil)
+          (x rxt-pcre-extended-mode)
+          (s rxt-pcre-s-mode))
       (rxt-extended-skip)
+      ;; Check for special constructs (? ... ) and (* ...)
       (rxt-token-case
-       ((rx "?")                        ; Special constructs: (? ... )
+       ((rx "?")                        ; (? ... )
         (rxt-token-case
          (":" (setq shy t))             ; Shy group (?: ...)
          ("#"                           ; Comment (?# ...)
           (search-forward ")")
           (throw 'return rxt-trivial))
+         ((rx (or                       ; Set/unset s & x modifiers
+               (seq (group (* (any "xs"))) "-" (group (+ (any "xs"))))
+               (seq (group (+ (any "xs"))))))
+          (let ((begin (match-beginning 0))
+                (on (or (match-string 1) (match-string 3)))
+                (off (or (match-string 2) "")))
+            (if (rxt-extended-flag on) (setq x t))
+            (if (rxt-s-flag on) (setq s t))
+            (if (rxt-extended-flag off) (setq x nil))
+            (if (rxt-s-flag off) (setq s nil))
+            (rxt-token-case
+             (":" (setq shy t))   ; Parse a shy group with these flags
+             (")"
+              ;; Set modifiers here to take effect for the remainder
+              ;; of this expression; they are let-bound in
+              ;; rxt-parse-exp
+              (setq rxt-pcre-extended-mode x
+                    rxt-pcre-s-mode s)
+              (throw 'return rxt-trivial))
+             (t
+              (error "Unrecognized PCRE extended construction (?%s...)"
+                     (buffer-substring-no-properties begin (point)))))))
          (t (error "Unrecognized PCRE extended construction ?%c"
                    (char-after)))))
+
        ((rx "*")                ; None of these are recognized: (* ..)
         (let ((begin (point)))
           (search-forward ")")
           (error "Unrecognized PCRE extended construction (*%s"
                  (buffer-substring begin (point))))))
+
+      ;; Parse the remainder of the subgroup
       (unless shy (incf rxt-subgroup-count))
-      (let ((rx (rxt-parse-exp)))
+      (let* ((rxt-pcre-extended-mode x)
+             (rxt-pcre-s-mode s)
+             (rx (rxt-parse-exp)))
         (rxt-extended-skip)
-        (if (not (looking-at ")"))
-            (error "Subexpression missing close paren")
-          (goto-char (match-end 0))
-          (if shy rx (rxt-submatch rx)))))))
+        (rxt-token-case
+         (")" (if shy rx (rxt-submatch rx)))
+         (t (error "Subexpression missing close paren")))))))
 
 (defun rxt-parse-subgroup/el ()
   (let ((shy (rxt-token-case ("\\?:" t))))
     (unless shy (incf rxt-subgroup-count))
     (let ((rx (rxt-parse-exp)))
-      (if (not (looking-at (rx "\\)")))
-	  (error "Subexpression missing close paren")
-	(goto-char (match-end 0))
-	(if shy rx (rxt-submatch rx))))))
+      (rxt-token-case
+       ((rx "\\)") (if shy rx (rxt-submatch rx)))
+       (t (error "Subexpression missing close paren"))))))
 
 (defun rxt-parse-braces ()
   (rxt-token-case
