@@ -97,13 +97,22 @@
 ;; minimum of SRE's abstract data type is implemented: in particular,
 ;; regexps do not count their submatches.
 ;;
-
-;; BUGS:
 ;;
+;; BUGS AND LIMITATIONS:
 ;; - Although the string parser tries to interpret PCRE's octal and
 ;;   hexadecimal escapes correctly, there are problems with matching
 ;;   non-ASCII chars that I don't use enough to properly understand:
-;;   e.g., (string-match-p (rxt-pcre->rx "\\377") "\377") => nil
+;;   e.g., (string-match-p (rxt-pcre->elisp "\\377") "\377") => nil
+;;
+;; - Most of PCRE's rules for how ^, \A, $ and \Z interact with
+;;   newlines in a string are not implemented; they don't seem as
+;;   relevant to Emacs's buffer-oriented rather than
+;;   string/line-oriented model.
+;;
+;; - Many more esoteric PCRE features will never be supported because
+;;   they can't be emulated by translation to Elisp regexps. These
+;;   include the different lookaround assertions, conditionals, and
+;;   the "backtracking control verbs" (* ...) .
 ;;
 ;; TODO:
 ;; - PCRE \g{...}
