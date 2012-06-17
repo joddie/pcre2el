@@ -1267,7 +1267,10 @@ in character classes as outside them."
     (let ((a (string-to-number (match-string 1))))
       (values a a)))
    (t
-    (error "Bad brace expression"))))
+    (let ((begin (point)))
+      (search-forward "}" nil 'go-to-end)
+      (error "Bad brace expression {%s"
+             (buffer-substring-no-properties begin (point)))))))
 
 ;; Parse a character set range [...]		 
 (defvar rxt-posix-classes
