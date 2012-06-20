@@ -196,11 +196,11 @@ value of FORMS. Returns `nil' if none of the CASES matches."
    (:constructor make-rxt-seq (elts)))
   elts)
 
-;;; Slightly smart sequence constructor:
-;;; - Flattens nested sequences
-;;; - Drops trivial "" elements
-;;; - Empty sequence => ""
-;;; - Singleton sequence is reduced to its one element.
+;; Slightly smart sequence constructor:
+;; - Flattens nested sequences
+;; - Drops trivial "" elements
+;; - Empty sequence => ""
+;; - Singleton sequence is reduced to its one element.
 (defun rxt-seq (res)		    ; Flatten nested seqs & drop ""'s.
   (let ((res (rxt-seq-flatten res)))
     (if (consp res)
@@ -241,33 +241,58 @@ value of FORMS. Returns `nil' if none of the CASES matches."
         (null (rxt-choice-elts re)))
    (rxt-empty-char-set-p re)))
   
-;; Constructor
+;; Slightly smart choice constructor:
+;; -- flattens nested choices
+;; -- drops never-matching (empty) REs
+;; -- folds character sets and single-char strings together
+;; -- singleton choice reduced to the element itself
 (defun rxt-choice (res)
   (let ((res (rxt-choice-flatten res)))
-    ;; If all elts are char-class re's, fold them together.
-    (if (and (not (zerop (length res)))
-	     (every #'rxt-char-set-p res))
-	(let ((cset (car res)))
-	  (dolist (re (cdr res))
-	    (setq cset (rxt-char-set-adjoin! cset re)))
-	  ;; TODO: turn one-character csets into strings
-	  cset)
-
     (if (consp res)
 	(if (consp (cdr res))
 	    (make-rxt-choice res)	; General case
-	  (car res))		; Singleton sequence
-      rxt-empty))))
+	  (car res))                    ; Singleton choice
+      rxt-empty)))
 
+;; Flatten any nested rxt-choices amongst RES, and collect any
+;; charsets together
 (defun rxt-choice-flatten (res)
-  (if (consp res)
-      (let* ((re (car res))
-	     (tail (rxt-choice-flatten (cdr res))))
-	(cond ((rxt-choice-p re)		; Flatten nested choices
-	       (append (rxt-choice-flatten (rxt-choice-elts re)) tail))
-	      ((rxt-empty-p re) tail)	; Drop empty re's.
-	      (t (cons re tail))))
-    '()))
+  (multiple-value-bind (res cset)
+      (rxt-choice-flatten+char-set res)
+    (if (not (rxt-empty-p cset))
+        (cons cset res)
+      res)))
+
+;; Does the real work for the above. Returns two values: a flat list
+;; of elements (with any rxt-choices reduced to their contents), and a
+;; char-set union that collects together all the charsets and
+;; single-char strings
+(defun rxt-choice-flatten+char-set (res)
+  (if (null res)
+      (values '() (make-rxt-char-set))
+    (let* ((re (car res)))
+      (multiple-value-bind (tail cset)
+          (rxt-choice-flatten+char-set (cdr res))
+	(cond ((rxt-choice-p re)        ; Flatten nested choices
+	       (values
+                (append (rxt-choice-elts re) tail)
+                cset))
+
+	      ((rxt-empty-p re)         ; Drop empty re's.
+               (values tail cset))
+
+              ((rxt-char-set-p re)      ; Fold char sets together
+               (values tail
+                       (rxt-char-set-adjoin! cset re)))
+
+              ((and (rxt-string-p re)   ; Same for 1-char strings
+                    (= 1 (length (rxt-string-chars re))))
+               (values tail
+                       (rxt-char-set-adjoin! cset
+                                             (rxt-string-chars re))))
+
+	      (t                        ; Otherwise.
+               (values (cons re tail) cset)))))))
 
 ;;; Repetition
 (defstruct rxt-repeat
@@ -339,9 +364,9 @@ unchanged."
     (make-rxt-char-set :chars (list item)))
 
    ((consp item)
-    (if (consp (cdr item))
-	(make-rxt-char-set :chars item)
-      (make-rxt-char-set :ranges (list item))))
+    (if (consp (cdr item))              
+	(make-rxt-char-set :chars item)         ; list of chars
+      (make-rxt-char-set :ranges (list item)))) ; range (from . to)
 
    ((stringp item)
     (make-rxt-char-set :chars (mapcar 'identity item)))
@@ -369,18 +394,26 @@ modified."
    ((integerp item)			; character
     (push item (rxt-char-set-chars cset)))
 
-   ((consp item)			; range (from . to)
-    (push item (rxt-char-set-ranges cset)))
+   ((consp item)
+    (if (consp (cdr item))
+        (dolist (char item)             ; list of chars
+          (rxt-char-set-adjoin! cset char))
+      (push item (rxt-char-set-ranges cset)))) ; range (from . to)
+
+   ((stringp item) 
+    (mapc (lambda (char)
+            (rxt-char-set-adjoin! cset char))
+          item))
 
    ((symbolp item)			; posix character class
     (push item (rxt-char-set-classes cset)))
 
    ((rxt-char-set-p item)
-      (dolist (type (list (rxt-char-set-chars item)
-			  (rxt-char-set-ranges item)
-			  (rxt-char-set-classes item)))
-	(dolist (thing type)
-	  (rxt-char-set-adjoin! cset thing))))
+    (dolist (type (list (rxt-char-set-chars item)
+                        (rxt-char-set-ranges item)
+                        (rxt-char-set-classes item)))
+      (dolist (thing type)
+        (rxt-char-set-adjoin! cset thing))))
 
    (t
     (error "Can't adjoin non-rxt-char-set, character, range or symbol %S" item)))
