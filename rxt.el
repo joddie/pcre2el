@@ -1505,6 +1505,24 @@ in character classes as outside them."
   (interactive (rxt-interactive "Elisp regexp: "))
   (rxt-value (rxt-adt->strings (rxt-parse-re el nil))))
 
+(defun rxt-explain-elisp (regexp)
+  "Insert the pretty-printed `rx' syntax for REGEXP in a new buffer.
+
+REGEXP is the string representation of a regular expression in
+Emacs Lisp syntax. Interactively, reads and evaluates the Lisp
+expression near point, which may be a string literal or any
+expression that produces a string."
+  (interactive
+   (list (eval (sexp-at-point))))
+  (let ((buffer (get-buffer-create "* Regexp Explain *"))
+        (print-escape-newlines t))
+    (with-current-buffer buffer
+      (emacs-lisp-mode)
+      (erase-buffer)
+      (insert (format ";; %S\n\n" regexp))
+      (insert (pp-to-string (rxt-elisp->rx regexp)))
+      (display-buffer buffer))))
+
 ;;; testing purposes only
 (defun rxt-test (re &optional pcre)
   (interactive "x")
