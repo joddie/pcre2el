@@ -763,7 +763,7 @@ or a shorthand char-set specifier (see `rxt-char-set')`."
 (defun rxt-paren-if-necessary (s lev)
   (if (< lev 3)
       s
-      (concat "(?:" s ")")))
+    (concat "(?:" s ")")))
 
 (defun rxt-choice->pcre (re)
   (let ((elts (rxt-choice-elts re)))
@@ -806,7 +806,7 @@ or a shorthand char-set specifier (see `rxt-char-set')`."
 			   (concat s "{" (number-to-string to) "}"))
 			  (t
 			   (concat s "{" (number-to-string from)
-					  "," (number-to-string to) "}")))
+                                   "," (number-to-string to) "}")))
 		  (cond ((= from 0)
                          (concat s (if greedy "*" "*?")))
 			((= from 1)
@@ -905,7 +905,7 @@ or a shorthand char-set specifier (see `rxt-char-set')`."
 	(to (rxt-repeat-to re)))
     (if (not to)
 	(error "Can't generate matches for unbounded repeat %s"
-	re)
+               re)
       (let ((strings (rxt-adt->strings (rxt-repeat-body re))))
 	(rxt-repeat-n-m->strings from to strings)))))
 
@@ -1343,8 +1343,8 @@ in character classes as outside them."
       ":]"))
 
 (defun rxt-parse-char-class ()
- (when (eobp)
-   (error "Missing close right bracket in regexp"))
+  (when (eobp)
+    (error "Missing close right bracket in regexp"))
 
   (let* ((negated (rxt-token-case
 		   ("\\^" t)
@@ -1447,13 +1447,13 @@ in character classes as outside them."
       (setq r-end (rxt-parse-char-class-atom)
 	    pos (point)))
 
-      (if (integerp r-end)
-	  ;; This is a range: move after it and return the ending character
-	  (progn
-	    (goto-char pos)
-	    r-end)
-	;; Not a range.
-	nil)))
+    (if (integerp r-end)
+        ;; This is a range: move after it and return the ending character
+        (progn
+          (goto-char pos)
+          r-end)
+      ;; Not a range.
+      nil)))
 
 
 ;;; Public interface
@@ -1522,44 +1522,6 @@ expression that produces a string."
       (insert (format ";; %S\n\n" regexp))
       (insert (pp-to-string (rxt-elisp->rx regexp)))
       (display-buffer buffer))))
-
-;;; testing purposes only
-(defun rxt-test (re &optional pcre)
-  (interactive "x")
-  (insert (format "%S\n" re))
-  (let ((adt (rxt-parse-re re pcre)))
-    (insert (format "%S\n\n" (rx-to-string (rxt-adt->rx adt) t)))
-    (insert (format "%s\n\n" (rxt-adt->pcre adt)))
-    (insert (format "%S\n\n\n" (rxt-adt->rx adt)))))
-  
-(defun rxt-pcre-test (pcre)
-  (interactive "s")
-  (rxt-test pcre t))
-
-;; (let ((rxt-parse-pcre t))
-;;   (let ((rx (rxt-parse-re "(?:cat(?:aract|erpillar|))")))
-;;     (message "%S\n%S" rx (rx-to-string rx))))
-
-
-;; (with-temp-buffer
-;;   (insert "\\x41-\\x50\\x{070}[:alnum:]foo]")
-;;   (goto-char 0)
-;;   (let* ((rxt-parse-pcre t)
-;; 	 (result (rxt-parse-char-class))
-;; 	 (chars (rxt-char-set-chars result))
-;; 	 (ranges (rxt-char-set-ranges result))
-;; 	 (classes (rxt-char-set-classes result))
-;; 	 (negated (rxt-negated result)))
-;;     (message "Negated: %s\nChars: %s\nRanges: %s\nClasses: %s"
-;; 	     negated
-;; 	     (mapconcat #'char-to-string chars "")
-;; 	     (mapconcat
-;; 	      (lambda (range)
-;; 		(let ((begin (car range))
-;; 		      (end (cdr range)))
-;; 		  (format "%c-%c" begin end)))
-;; 	      ranges ", ")
-;; 	     (mapconcat #'symbol-name classes ", "))))
 
 
 ;;;; RE-Builder extensions from re-builder.el -- to be turned into advice
@@ -1632,19 +1594,19 @@ Optional argument SYNTAX must be specified if called non-interactively."
 
   (let ((re (or (reb-target-binding reb-regexp)
 		(reb-empty-regexp))))
-  (cond ((eq reb-re-syntax 'read)
-	 (print re (current-buffer)))
-	((eq reb-re-syntax 'pcre)
-	 (insert "\n"
-		 (or (reb-target-binding reb-regexp-src)
-		     (reb-empty-regexp))
-		 "\n"))
-	((eq reb-re-syntax 'string)
-	 (insert "\n\"" re "\""))
-	;; For the Lisp syntax we need the "source" of the regexp
-	((reb-lisp-syntax-p)
-	 (insert (or (reb-target-binding reb-regexp-src)
-		     (reb-empty-regexp)))))))
+    (cond ((eq reb-re-syntax 'read)
+           (print re (current-buffer)))
+          ((eq reb-re-syntax 'pcre)
+           (insert "\n"
+                   (or (reb-target-binding reb-regexp-src)
+                       (reb-empty-regexp))
+                   "\n"))
+          ((eq reb-re-syntax 'string)
+           (insert "\n\"" re "\""))
+          ;; For the Lisp syntax we need the "source" of the regexp
+          ((reb-lisp-syntax-p)
+           (insert (or (reb-target-binding reb-regexp-src)
+                       (reb-empty-regexp)))))))
 
 (defun reb-cook-regexp (re)
   "Return RE after processing it according to `reb-re-syntax'."
