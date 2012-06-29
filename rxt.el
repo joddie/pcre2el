@@ -965,44 +965,64 @@ of line.")
 When /s is used, PCRE's \".\" matches newline characters, which
 otherwise it would not match.")
 
+(defvar rxt-branch-stop-regexp nil)
+(defvar rxt-choice-regexp nil)
+
+(defun rxt-parse-re (re &optional pcre type)
+  (let* ((rxt-parse-pcre pcre)
+         (rxt-choice-regexp
+          (if pcre (rx "|") (rx "\\|")))
+         (rxt-branch-stop-regexp
+          (if pcre
+              (rx (or "|" ")"))
+            (rx (or "\\|" "\\)"))))
+         (rxt-subgroup-count 0)
+         (case-fold-search nil))
+    (with-temp-buffer
+      (insert re)
+      (goto-char (point-min))
+      (let ((parse (rxt-parse-exp)))
+	(case type
+	  ((sre) (rxt-adt->sre parse))
+	  ((rx) (rxt-adt->rx parse))
+	  (t parse))))))
+
+;; Parse a complete regex: a number of branches separated by | or
+;; \|, as determined by `rxt-branch-stop-regexp'.
 (defun rxt-parse-exp ()
+  ;; These variables are let-bound here because in PCRE mode they may
+  ;; be set internally by (?x) or (?s) constructions, whose scope
+  ;; lasts until the end of a sub-expression
   (let ((rxt-pcre-extended-mode rxt-pcre-extended-mode)
-        (rxt-pcre-s-mode rxt-pcre-s-mode)
-        (bar (regexp-quote (if rxt-parse-pcre "|" "\\|"))))
+        (rxt-pcre-s-mode rxt-pcre-s-mode))
     (if (not (eobp))
 	(let ((branches '()))
 	  (catch 'done
 	    (while t
-	      (let ((branch (rxt-parse-branch)))
-		(setq branches (cons branch branches))
-                (rxt-extended-skip)
-		(if (looking-at bar)
+              (let ((branch (rxt-parse-branch)))
+                (push branch branches)
+		(if (looking-at rxt-choice-regexp)
 		    (goto-char (match-end 0))
 		  (throw 'done (rxt-choice (reverse branches))))))))
-      (rxt-choice nil))))
+      (rxt-seq nil))))
 
+;; Skip over whitespace and comments in PCRE extended mode
 (defun rxt-extended-skip ()
-  "Skip over whitespace and comments in PCRE extended regexps."
   (when rxt-pcre-extended-mode
     (skip-syntax-forward "-")
     (while (looking-at "#")
       (beginning-of-line 2)
       (skip-syntax-forward "-"))))
 
+;; Parse a regexp "branch": a sequence of pieces
 (defun rxt-parse-branch ()
-  (let ((stop
-	 (regexp-opt
-	  (if rxt-parse-pcre '("|" ")") '("\\|" "\\)")))))
-    (rxt-extended-skip)
-    (if (or (eobp)
-            (looking-at stop))
-        rxt-empty-string
-      (let ((pieces (list (rxt-parse-piece t))))
-        (while (not (or (eobp)
-                        (looking-at stop)))
-          (let ((piece (rxt-parse-piece nil)))
-            (push piece pieces)))
-        (rxt-seq (reverse pieces))))))
+  (rxt-extended-skip)
+  (let ((pieces '()))
+    (while (not (or (eobp)
+                    (looking-at rxt-branch-stop-regexp)))
+      (let ((piece (rxt-parse-piece nil)))
+        (push piece pieces)))
+    (rxt-seq (reverse pieces))))
 
 ;; Parse a regexp "piece": an atom (`rxt-parse-atom') plus any
 ;; following quantifiers
@@ -1437,19 +1457,6 @@ in character classes as outside them."
 
 
 ;;; Public interface
-(defun rxt-parse-re (re &optional pcre type)
-  (let ((rxt-parse-pcre pcre)
-	(rxt-subgroup-count 0)
-	(case-fold-search nil))
-    (with-temp-buffer
-      (insert re)
-      (goto-char (point-min))
-      (let ((parse (rxt-parse-exp)))
-	(case type
-	  ((sre) (rxt-adt->sre parse))
-	  ((rx) (rxt-adt->rx parse))
-	  (t parse))))))
-
 (defmacro rxt-value (expr)
   (let ((val (make-symbol "val"))
 	(str (make-symbol "str")))
