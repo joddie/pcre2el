@@ -363,36 +363,6 @@
                (rxt-read-delimited-pcre)
              (error
               (list (read-string prompt) "")))))))
-  
-(defun rxt-read-delimited-pcre ()
-  "Read a Perl-style delimited regexp and flags from the current buffer.
-
-Point should be before the regexp literal before calling
-this. Currently only regexps delimited by / ... / are supported.
-A preceding \"m\", \"qr\" or \"s\" will be ignored, as will the
-replacement string in an s/.../.../ construction.
-
-Returns two strings: the regexp and the flags."
-  (save-excursion
-    (skip-syntax-forward "-")
-
-    ;; Skip m, qr, s
-    (let ((is-subst (rxt-token-case
-                     ("s" t)
-                     ((rx (or "m" "qr")) nil))))
-
-      (when (not (looking-at "/"))
-        (error "Only Perl regexps delimited by slashes are supported"))
-      (let ((beg (match-end 0))
-            (delim (rx (not (any "\\"))
-                       (group "/"))))
-        (search-forward-regexp delim)
-        (let ((end (match-beginning 1)))
-          (when is-subst (search-forward-regexp delim))
-        (let ((pcre (buffer-substring-no-properties beg end)))
-          (rxt-token-case
-           ("[gimosx]*"
-            (values pcre (match-string-no-properties 0))))))))))
                              
 ;; Translations from Emacs regexps to other formats
 (defun rxt-elisp-to-pcre (regexp)
@@ -560,6 +530,7 @@ value of FORMS. Returns `nil' if none of the CASES matches."
 		 (goto-char (match-end 0))
 		 ,@action))))
 	 cases))))
+
 
 
 ;;;; Regexp ADT
@@ -1355,8 +1326,6 @@ or a shorthand char-set specifier (see `rxt-char-set')`."
 	      ((> i end))
 	    (push (char-to-string i) chars))))
       chars)))
-	
-  
 
 
 ;;;; String regexp -> ADT parser
@@ -1403,6 +1372,37 @@ otherwise it would not match.")
       (insert re)
       (goto-char (point-min))
       (rxt-parse-exp))))
+      
+;; Read PCRE + flags
+(defun rxt-read-delimited-pcre ()
+  "Read a Perl-style delimited regexp and flags from the current buffer.
+
+Point should be before the regexp literal before calling
+this. Currently only regexps delimited by / ... / are supported.
+A preceding \"m\", \"qr\" or \"s\" will be ignored, as will the
+replacement string in an s/.../.../ construction.
+
+Returns two strings: the regexp and the flags."
+  (save-excursion
+    (skip-syntax-forward "-")
+
+    ;; Skip m, qr, s
+    (let ((is-subst (rxt-token-case
+                     ("s" t)
+                     ((rx (or "m" "qr")) nil))))
+
+      (when (not (looking-at "/"))
+        (error "Only Perl regexps delimited by slashes are supported"))
+      (let ((beg (match-end 0))
+            (delim (rx (not (any "\\"))
+                       (group "/"))))
+        (search-forward-regexp delim)
+        (let ((end (match-beginning 1)))
+          (when is-subst (search-forward-regexp delim))
+        (let ((pcre (buffer-substring-no-properties beg end)))
+          (rxt-token-case
+           ("[gimosx]*"
+            (values pcre (match-string-no-properties 0))))))))))
 
 ;; Parse a complete regex: a number of branches separated by | or
 ;; \|, as determined by `rxt-branch-stop-regexp'.
