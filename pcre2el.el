@@ -1434,7 +1434,7 @@ Returns two strings: the regexp and the flags."
 ;; Parse a regexp "branch": a sequence of pieces
 (defun rxt-parse-branch ()
   (rxt-extended-skip)
-  (let ((pieces '()))
+  (let ((pieces (list (rxt-parse-piece t))))
     (while (not (or (eobp)
                     (looking-at rxt-branch-stop-regexp)))
       (let ((piece (rxt-parse-piece nil)))
