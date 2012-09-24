@@ -34,7 +34,6 @@
     .... )= syntax
   - comments =(?# ... )=
 
-
 ** Usage
    Example of using the conversion functions:
    : (rxt-pcre-to-elisp "(abc|def)\\w+\\d+")

@@ -1,9 +1,11 @@
-;; pcre2el.el -- PCRE/Elisp/rx/SRE regexp syntax converter and utilities
-;;
-;; Author:			j.j.oddie at gmail.com
+;;; pcre2el.el --- PCRE/Elisp/rx/SRE regexp syntax converter and utilities
+
+;; Author:			joddie <j.j.oddie at gmail.com>
 ;; Hacked additionally by:	opensource at hardakers dot net
 ;; Created:			14 Feb 2012
-;; Updated:			15 July 2012
+;; Updated:			22 July 2012
+;; Version:                     1.1
+;; Url:                         https://github.com/joddie/pcre2el
 
 ;; This file is NOT part of GNU Emacs.
 
@@ -2011,3 +2013,4 @@ in character classes as outside them."
 
 
 ;;; pcre2el.el ends here
+

@@ -1,5 +1,4 @@
-
-;;;; A few simple tests for pcre2el
+;;; pcre2el.tests.el -- tests for pcre2el/rxt
 
 (require 'pcre2el)
 
@@ -116,4 +115,4 @@
 (assert
  (string-match-p (pcre-to-elisp "^[^\\W]*$") "foo"))
 
-;;; pcre2el.el ends here
+;;; pcre2el.tests.el ends here
