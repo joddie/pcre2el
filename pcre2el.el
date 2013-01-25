@@ -285,6 +285,23 @@
   ""
   :group 'rxt)
 
+(defcustom rxt-verbose-rx-translation nil
+  "Non-nil if `rxt-pcre-to-rx' and `rxt-elisp-to-rx' should use verbose `rx' primitives.
+
+Verbose primitives are things like `line-start' instead of `bol',
+etc."
+  :group 'rxt
+  :type 'boolean)
+
+(defcustom rxt-explain-verbosely t
+  "Non-nil if `rxt-explain-elisp' and `rxt-explain-pcre' should use verbose `rx' primitives.
+
+This overrides the value of `rxt-verbose-rxt-translation' for
+these commands only."
+  :group 'rxt
+  :type 'boolean)
+
+
 ;;; User functions
 (defun pcre-query-replace-regexp (regexp to-string &optional delimited start end)
   "Use a PCRE regexp to search and replace with.
@@ -671,7 +688,6 @@ value of FORMS. Returns `nil' if none of the CASES matches."
       (setf (rxt-syntax-tree-begin result) (rxt-syntax-tree-begin (first strs))
             (rxt-syntax-tree-end result) (rxt-syntax-tree-end (car (last strs))))
       result)))
-
 ;;; Other primitives
 (defstruct (rxt-primitive
 	    (:constructor rxt-primitive (pcre rx &optional (sre rx)))
@@ -1047,25 +1063,47 @@ or a shorthand char-set specifier (see `rxt-char-set')`."
 ;;;; ADT unparsers to rx and sre notation
 
 ;;; ADT -> rx notation
+(defvar rxt-rx-verbose-equivalents
+  '((bol . line-start)
+    (eol . line-end)
+    (nonl . not-newline)
+    (bos . string-start)
+    (eos . string-end)
+    (bow . word-start)
+    (eow . word-end)
+    (seq . sequence))
+  "Alist of verbose equivalents for short `rx' primitives.") 
+
+(defun rxt-rx-symbol (sym)
+  (if (or rxt-verbose-rx-translation
+          (and rxt-explain
+               rxt-explain-verbosely))
+      (or (cdr (assoc sym rxt-rx-verbose-equivalents))
+          sym)
+    sym))
+
 (defun rxt-adt->rx (re)
   (let ((rx
          (cond
           ((rxt-primitive-p re)
-           (rxt-primitive-rx re))
+           (rxt-rx-symbol (rxt-primitive-rx re)))
 
           ((rxt-string-p re) (rxt-string-chars re))
 
           ((rxt-seq-p re)
-           (cons 'seq (mapcar #'rxt-adt->rx (rxt-seq-elts re))))
+           (cons (rxt-rx-symbol 'seq)
+                 (mapcar #'rxt-adt->rx (rxt-seq-elts re))))
 
           ((rxt-choice-p re)
-           (cons 'or (mapcar #'rxt-adt->rx (rxt-choice-elts re))))
+           (cons (rxt-rx-symbol 'or)
+                 (mapcar #'rxt-adt->rx (rxt-choice-elts re))))
 
           ((rxt-submatch-p re)
            (if (rxt-seq-p (rxt-submatch-body re))
-               (cons 'submatch
+               (cons (rxt-rx-symbol 'submatch)
                      (mapcar #'rxt-adt->rx (rxt-seq-elts (rxt-submatch-body re))))
-             (list 'submatch (rxt-adt->rx (rxt-submatch-body re)))))
+             (list (rxt-rx-symbol 'submatch)
+                   (rxt-adt->rx (rxt-submatch-body re)))))
 
           ((rxt-backref-p re)
            (let ((n (rxt-backref-n re)))
@@ -1084,18 +1122,38 @@ or a shorthand char-set specifier (see `rxt-char-set')`."
                  (to (rxt-repeat-to re))
                  (greedy (rxt-repeat-greedy re))
                  (body (rxt-adt->rx (rxt-repeat-body re))))
-             (cond
-              ((and (zerop from) (null to))
-               (list (if greedy '* '*?) body))
-              ((and (equal from 1) (null to))
-               (list (if greedy '+ '+?) body))
-              ((and (zerop from) (equal to 1))
-               (list (if greedy 'opt '\??) body))
-              ((null to) (list '>= from body))
-              ((equal from to)
-               (list '= from body))
-              (t
-               (list '** from to body)))))
+             (if rxt-verbose-rx-translation
+                 (let ((rx
+                        (cond
+                         ((and (zerop from) (null to))
+                          `(zero-or-more ,body))
+                         ((and (equal from 1) (null to))
+                          `(one-or-more ,body))
+                         ((and (zerop from) (equal to 1))
+                          `(zero-or-one ,body))
+                         ((null to)
+                          `(>= ,from ,body))
+                         ((equal from to)
+                          `(repeat ,from ,body))
+                         (t
+                          `(** ,from ,to ,body)))))
+                   (if greedy
+                       (if rxt-explain
+                           rx           ; Readable but not strictly accurate. Fixme?
+                         `(maximal-match rx))
+                     `(minimal-match rx)))
+               (cond
+                ((and (zerop from) (null to))
+                 (list (if greedy '* '*?) body))
+                ((and (equal from 1) (null to))
+                 (list (if greedy '+ '+?) body))
+                ((and (zerop from) (equal to 1))
+                 (list (if greedy '? '\??) body))
+                ((null to) (list '>= from body))
+                ((equal from to)
+                 (list '= from body))
+                (t
+                 (list '** from to body))))))
 
           ((rxt-char-set-union-p re)
            (if (and (null (rxt-char-set-union-chars re))
