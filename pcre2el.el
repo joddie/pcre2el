@@ -97,7 +97,7 @@
 ;; ==========
 ;;    Example of using the conversion functions:
 ;;    (rxt-pcre-to-elisp "(abc|def)\\w+\\d+")
-;;       ;; => "\\(\\(?:abc\\|def\\)\\)[_[:alnum:]]+[:digit:]+"
+;;       ;; => "\\(\\(?:abc\\|def\\)\\)[_[:alnum:]]+[[:digit:]]+"
 ;;
 ;;    You can also use `pcre-to-elisp' as an alias for `rxt-pcre-to-elisp'.
 ;;
@@ -303,6 +303,8 @@ these commands only."
 
 
 ;;; User functions
+
+;;;###autoload
 (defun pcre-query-replace-regexp (regexp to-string &optional delimited start end)
   "Use a PCRE regexp to search and replace with.
    This calls query-replace-regexp after converting the PCRE input to
@@ -328,18 +330,29 @@ these commands only."
 
 ;; Macro for returning values. If called interactively, display the
 ;; value in the echo area and copy it to the kill ring; otherwise just
-;; return the value. If the result is Elisp, also pushes the value as
-;; a `read'-able literal.
+;; return the value. TYPE controls what to copy to the kill ring. If
+;; it is `pcre', copy the result as a string for yanking into Perl
+;; code, JS code, etc. If `sexp', copy the result as a `read'-able
+;; literal. If type is `emacs', copy both the string value (for use in
+;; interactive commands) and a readable string literal (for yanking
+;; into source buffers.
 (eval-when-compile
-  (defmacro rxt-value (expr &optional elisp) 
-    (let ((val (make-symbol "val"))
-          (str (make-symbol "str")))
+  (defmacro rxt-value (type expr)
+    (let ((val (make-symbol "val")))
       `(let ((,val ,expr))
          (if (called-interactively-p 'any)
-             (let ((,str (format "%S" ,val)))
+             (let ((lisp-literal (format "%S" ,val)))
                (message "%s" ,val)
-               ,(if elisp `(kill-new ,str) nil)
-               (kill-new (format "%s" ,val)))
+               ,(case type
+                  (pcre
+                   `(kill-new ,val))
+                  (sexp
+                   `(kill-new lisp-literal))
+                  (emacs
+                   `(progn
+                      (kill-new lisp-literal)
+                      (kill-new ,val)))
+                  (t (error "Bad type: %s" type))))
            ,val)))))
 
 ;; Read an Elisp regexp interactively.
@@ -401,6 +414,7 @@ these commands only."
               (list (read-string prompt) "")))))))
                              
 ;; Translations from Emacs regexps to other formats
+;;;###autoload
 (defun rxt-elisp-to-pcre (regexp)
   "Translate REGEXP, a regexp in Emacs Lisp syntax, to Perl-compatible syntax.
 
@@ -417,8 +431,9 @@ it to the kill ring.
 Emacs regexp features such as syntax classes which cannot be
 translated to PCRE will cause an error."
   (interactive (rxt-interactive/elisp))
-  (rxt-value (rxt-adt->pcre (rxt-parse-re regexp))))
+  (rxt-value pcre (rxt-adt->pcre (rxt-parse-re regexp))))
 
+;;;###autoload
 (defun rxt-elisp-to-rx (regexp)
   "Translate REGEXP, a regexp in Emacs Lisp syntax, to `rx' syntax.
 
@@ -426,8 +441,9 @@ See `rxt-elisp-to-pcre' for a description of the interactive
 behavior and `rx' for documentation of the S-expression based
 regexp syntax."
   (interactive (rxt-interactive/elisp))
-  (rxt-value (rxt-adt->rx (rxt-parse-re regexp))))
+  (rxt-value sexp (rxt-adt->rx (rxt-parse-re regexp))))
 
+;;;###autoload
 (defun rxt-elisp-to-sre (regexp)
   "Translate REGEXP, a regexp in Emacs Lisp syntax, to SRE syntax.
 
@@ -440,8 +456,9 @@ http://www.scsh.net/docu/post/sre.html.
 Emacs regexp features, including backreferences, which cannot be
 translated to SRE will cause an error."
   (interactive (rxt-interactive/elisp))
-  (rxt-value (rxt-adt->sre (rxt-parse-re regexp))))
+  (rxt-value sexp (rxt-adt->sre (rxt-parse-re regexp))))
 
+;;;###autoload
 (defun rxt-elisp-to-strings (regexp)
   "Return a list of all strings matched by REGEXP, an Emacs Lisp regexp.
 
@@ -454,9 +471,10 @@ on).
 
 Throws an error if REGEXP contains any infinite quantifiers."
   (interactive (rxt-interactive/elisp))
-  (rxt-value (rxt-adt->strings (rxt-parse-re regexp))))
+  (rxt-value sexp (rxt-adt->strings (rxt-parse-re regexp))))
 
 ;; Translations from PCRE to other formats
+;;;###autoload
 (defun rxt-pcre-to-elisp (pcre &optional flags)
   "Translate PCRE, a regexp in Perl-compatible syntax, to Emacs Lisp.
 
@@ -468,18 +486,20 @@ PCRE regexp features that cannot be translated into Emacs syntax
 will cause an error. See the commentary section of pcre2el.el for
 more details."
   (interactive (rxt-interactive/pcre))
-  (rxt-value (rx-to-string (rxt-pcre-to-rx pcre flags) t)
-             t))
+  (rxt-value emacs (rx-to-string (rxt-pcre-to-rx pcre flags) t)))
 
+;;;###autoload
 (defalias 'pcre-to-elisp 'rxt-pcre-to-elisp)
 
+;;;###autoload
 (defun rxt-pcre-to-rx (pcre &optional flags)
   "Translate PCRE, a regexp in Perl-compatible syntax, to `rx' syntax.
 
 See `rxt-pcre-to-elisp' for a description of the interactive behavior."
   (interactive (rxt-interactive/pcre))
-  (rxt-value (rxt-adt->rx (rxt-parse-re pcre t flags))))
+  (rxt-value sexp (rxt-adt->rx (rxt-parse-re pcre t flags))))
 
+;;;###autoload
 (defun rxt-pcre-to-sre (pcre &optional flags)
   "Translate PCRE, a regexp in Perl-compatible syntax, to SRE syntax.
 
@@ -487,17 +507,18 @@ See `rxt-pcre-to-elisp' for a description of the interactive
 behavior and `rxt-elisp-to-sre' for information about the SRE
 S-expression format."
   (interactive (rxt-interactive/pcre))
-  (rxt-value (rxt-adt->sre (rxt-parse-re pcre t flags))))
+  (rxt-value sexp (rxt-adt->sre (rxt-parse-re pcre t flags))))
 
+;;;###autoload
 (defun rxt-pcre-to-strings (pcre &optional flags)
-    "Return a list of all strings matched by PCRE, a Perl-compatible regexp.
+  "Return a list of all strings matched by PCRE, a Perl-compatible regexp.
 
 See `rxt-elisp-to-pcre' for a description of the interactive
 behavior and `rxt-elisp-to-strings' for why this might be useful.
 
 Throws an error if PCRE contains any infinite quantifiers."
   (interactive (rxt-interactive/pcre))
-  (rxt-value (rxt-adt->strings (rxt-parse-re pcre t flags))))
+  (rxt-value sexp (rxt-adt->strings (rxt-parse-re pcre t flags))))
 
 ;;; "Explainers": display pretty-printed S-exp syntax for regexps 
 
@@ -511,6 +532,7 @@ Throws an error if PCRE contains any infinite quantifiers."
 (defvar rxt-highlight-overlays nil
   "List of active location-highlighting overlays in rxt-help-mode buffer.")
 
+;;;###autoload
 (defun rxt-explain-elisp (regexp)
   "Insert the pretty-printed `rx' syntax for REGEXP in a new buffer.
 
@@ -521,6 +543,7 @@ interactively."
   (let ((rxt-explain t))
     (rxt-pp-rx regexp (rxt-elisp-to-rx regexp))))
 
+;;;###autoload
 (defun rxt-explain-pcre (regexp &optional flags)
   "Insert the pretty-printed `rx' syntax for REGEXP in a new buffer.
 
