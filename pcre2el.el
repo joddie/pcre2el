@@ -5,8 +5,8 @@
 ;; Author:			joddie <jonxfield at gmail.com>
 ;; Hacked additionally by:	opensource at hardakers dot net
 ;; Created:			14 Feb 2012
-;; Updated:			22 July 2012
-;; Version:                     1.1
+;; Updated:			2 December 2012
+;; Version:                     1.2
 ;; Url:                         https://github.com/joddie/pcre2el
 
 ;; This file is NOT part of GNU Emacs.
@@ -270,6 +270,21 @@
 (require 'rx)
 (require 're-builder)
 
+;;; Customization group
+(defgroup rxt nil
+  "Regex syntax converter and utilities."
+  :version 1.2
+  :group 'tools
+  :group 'lisp
+  :link '(emacs-commentary-link :tag "commentary" "pcre2el.el")
+  :link '(emacs-library-link :tag "lisp file" "pcre2el.el")
+  :link '(url-link :tag "web page" "https://github.com/joddie/pcre2el"))
+
+(defface rxt-highlight
+  '((t :inherit highlight))
+  ""
+  :group 'rxt)
+
 ;;; User functions
 (defun pcre-query-replace-regexp (regexp to-string &optional delimited start end)
   "Use a PCRE regexp to search and replace with.
@@ -467,8 +482,17 @@ Throws an error if PCRE contains any infinite quantifiers."
   (interactive (rxt-interactive/pcre))
   (rxt-value (rxt-adt->strings (rxt-parse-re pcre t flags))))
 
-;; "Explainers": display pretty-printed S-exp syntax for regexps 
+;;; "Explainers": display pretty-printed S-exp syntax for regexps 
+
+;; When the `rxt-explain' flag is non-nil, `rxt-adt->rx' links each
+;; part of the generated `rx' sexp to its corresponding part of the
+;; parse tree structure, using `rxt-explain-hash-map'.  This allows
+;; highlighting corresponding pieces of syntax at point.
 (defvar rxt-explain nil)
+(defvar rxt-explain-hash-map (make-hash-table :weakness 'key))
+         
+(defvar rxt-highlight-overlays nil
+  "List of active location-highlighting overlays in rxt-help-mode buffer.")
 
 (defun rxt-explain-elisp (regexp)
   "Insert the pretty-printed `rx' syntax for REGEXP in a new buffer.
@@ -491,17 +515,20 @@ interactively."
     (rxt-pp-rx regexp (rxt-pcre-to-rx regexp flags))))
 
 ;; Generic major-mode-based dispatch
+;; FIXME: This should be made into a minor mode w/ keybindings
 (defun rxt-explain ()
   (interactive)
   (if (memq major-mode '(emacs-lisp-mode lisp-interaction-mode))
       (call-interactively #'rxt-explain-elisp)
-    (call-interactively #'rxt-explain-elisp)))
+    (call-interactively #'rxt-explain-pcre)))
 
+;; Major mode for displaying pretty-printed S-exp syntax
 (define-derived-mode rxt-help-mode emacs-lisp-mode "Regexp Explain"
   (setq buffer-read-only t)
   (add-hook 'post-command-hook 'rxt-highlight-text nil t)
   (rxt-highlight-text))
 
+;; Hack: stop paredit-mode interfering with `rxt-print-rx'
 (add-hook 'rxt-help-mode-hook
           (lambda ()
               (if paredit-mode (paredit-mode 0))))
@@ -510,6 +537,7 @@ interactively."
 (define-key rxt-help-mode-map "z" 'kill-this-buffer)
 
 (defun rxt-pp-rx (regexp rx)  
+  "Display string regexp REGEXP with its `rx' form RX in an `rxt-help-mode' buffer."
   (with-current-buffer (get-buffer-create "* Regexp Explain *")
     (let ((print-escape-newlines t)
           (inhibit-read-only t))
@@ -526,7 +554,8 @@ interactively."
     (pop-to-buffer (current-buffer))))
 
 (defun* rxt-print-rx (rx &optional (depth 0))
-  (let ((re (gethash rx rxt-rx-hash-map))
+  "Print RX like `print', adding text overlays for corresponding source locations."
+  (let ((re (gethash rx rxt-explain-hash-map))
         (begin (point)))
     (if (consp rx)
         (progn 
@@ -558,13 +587,9 @@ interactively."
         (dolist (ol (list sexp-ol source-ol))
           (overlay-put ol 'priority depth)
           (overlay-put ol 'rxt-bounds bounds))))))
-         
-(defvar rxt-highlight-overlays nil)
-(defface rxt-highlight
-  '((t :inherit highlight))
-  "")
 
 (defun rxt-highlight-text ()
+  "Highlight the regex syntax at point and its corresponding RX/string form."
   (let ((all-bounds (get-char-property (point) 'rxt-bounds))
         (end (get-char-property (point) 'rxt-highlight-end)))
     (mapc #'delete-overlay rxt-highlight-overlays)
@@ -617,6 +642,9 @@ value of FORMS. Returns `nil' if none of the CASES matches."
 
 
 ;;;; Regexp ADT
+
+;; Base class that keeps the source text as a string with offsets
+;; beginning and ending parsed portion
 (defstruct
   rxt-syntax-tree
   begin end source)
@@ -629,7 +657,6 @@ value of FORMS. Returns `nil' if none of the CASES matches."
   chars)
 
 (defvar rxt-empty-string (rxt-string ""))
-(defvar rxt-trivial rxt-empty-string)
 
 (defun rxt-trivial-p (re)
   (and (rxt-string-p re)
@@ -692,7 +719,7 @@ value of FORMS. Returns `nil' if none of the CASES matches."
 	(if (consp (cdr res))
 	    (make-rxt-seq res)		; General case
 	  (car res))			; Singleton sequence
-      rxt-trivial)))			; Empty seq -- ""
+      rxt-empty-string)))               ; Empty seq -- ""
 
 (defun rxt-seq-flatten (res)
   (if (consp res)
@@ -1020,8 +1047,6 @@ or a shorthand char-set specifier (see `rxt-char-set')`."
 ;;;; ADT unparsers to rx and sre notation
 
 ;;; ADT -> rx notation
-(defvar rxt-rx-hash-map (make-hash-table :weakness 'key))
-
 (defun rxt-adt->rx (re)
   (let ((rx
          (cond
@@ -1094,10 +1119,15 @@ or a shorthand char-set specifier (see `rxt-char-set')`."
 
           (t
            (error "No RX translation for %s" re)))))
-    (when (and (symbolp rx)    ;; HACK
-               rxt-explain)
-      (setq rx (make-symbol (symbol-name rx))))
-    (puthash rx re rxt-rx-hash-map) 
+    
+    ;; Store source information on each fragment of the generated RX
+    ;; sexp for rxt-explain mode
+    (when rxt-explain
+      ;; Use gensyms to store unique source information for multiple
+      ;; occurrences of primitives like `bol'
+      (when (symbolp rx)
+        (setq rx (make-symbol (symbol-name rx))))
+      (puthash rx re rxt-explain-hash-map)) 
     rx))
 
 ;;; ADT -> SRE notation
@@ -1807,7 +1837,7 @@ in character classes as outside them."
          (":" (setq shy t))             ; Shy group (?: ...)
          ("#"                           ; Comment (?# ...)
           (search-forward ")")
-          (throw 'return rxt-trivial))
+          (throw 'return rxt-empty-string))
          ((rx (or                       ; Set/unset s & x modifiers
                (seq (group (* (any "xs"))) "-" (group (+ (any "xs"))))
                (seq (group (+ (any "xs"))))))
@@ -1826,7 +1856,7 @@ in character classes as outside them."
               ;; rxt-parse-exp
               (setq rxt-pcre-extended-mode x
                     rxt-pcre-s-mode s)
-              (throw 'return rxt-trivial))
+              (throw 'return rxt-empty-string))
              (t
               (error "Unrecognized PCRE extended construction (?%s...)"
                      (buffer-substring-no-properties begin (point)))))))
