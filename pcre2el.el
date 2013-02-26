@@ -540,7 +540,8 @@ REGEXP is a regular expression in Emacs Lisp syntax. See
 `rxt-elisp-to-pcre' for a description of how REGEXP is read
 interactively."
   (interactive (rxt-interactive/elisp))
-  (let ((rxt-explain t))
+  (let ((rxt-explain t)
+        (rxt-verbose-rx-translation rxt-explain-verbosely))
     (rxt-pp-rx regexp (rxt-elisp-to-rx regexp))))
 
 ;;;###autoload
@@ -551,7 +552,8 @@ REGEXP is a regular expression in PCRE syntax. See
 `rxt-pcre-to-elisp' for a description of how REGEXP is read
 interactively."
   (interactive (rxt-interactive/pcre))
-  (let ((rxt-explain t))
+  (let ((rxt-explain t)
+        (rxt-verbose-rx-translation rxt-explain-verbosely))
     (rxt-pp-rx regexp (rxt-pcre-to-rx regexp flags))))
 
 ;; Generic major-mode-based dispatch
@@ -1171,7 +1173,7 @@ or a shorthand char-set specifier (see `rxt-char-set')`."
                 ((and (equal from 1) (null to))
                  (list (if greedy '+ '+?) body))
                 ((and (zerop from) (equal to 1))
-                 (list (if greedy '? '\??) body))
+                 (list (if greedy '\? '\??) body))
                 ((null to) (list '>= from body))
                 ((equal from to)
                  (list '= from body))
