@@ -558,13 +558,72 @@ interactively."
         (rxt-verbose-rx-translation rxt-explain-verbosely))
     (rxt-pp-rx regexp (rxt-pcre-to-rx regexp flags))))
 
-;; Generic major-mode-based dispatch
-;; FIXME: This should be made into a minor mode w/ keybindings
-(defun rxt-explain ()
+
+;;; Minor mode and keybindings
+
+;; DTRT based on major mode
+(defmacro rxt-mode-dispatch (elisp-function pcre-function)
+  `(if (memq major-mode '(emacs-lisp-mode lisp-interaction-mode))
+       (call-interactively #',elisp-function)
+     (call-interactively #',pcre-function)))
+
+(defun rxt-explain () 
+  "Pop up a buffer with pretty-printed `rx' syntax for the regex at point.
+
+Chooses regex syntax to read based on current major mode, calling
+`rxt-explain-elisp' if buffer is in `emacs-lisp-mode' or
+`lisp-interaction-mode', or `rxt-explain-pcre' otherwise."
   (interactive)
-  (if (memq major-mode '(emacs-lisp-mode lisp-interaction-mode))
-      (call-interactively #'rxt-explain-elisp)
-    (call-interactively #'rxt-explain-pcre)))
+  (rxt-mode-dispatch rxt-explain-elisp rxt-explain-pcre))
+
+(defun rxt-convert-syntax () 
+  "Convert regex at point to other kind of syntax, depending on major mode.
+
+For buffers in `emacs-lisp-mode' or `lisp-interaction-mode',
+calls `rxt-elisp-to-pcre' to convert to PCRE syntax. Otherwise,
+calls `rxt-pcre-to-elisp' to convert to Emacs syntax.
+
+The converted syntax is displayed in the echo area and copied to
+the kill ring; see the two functions named above for details."
+  (interactive)
+  (rxt-mode-dispatch rxt-elisp-to-pcre rxt-pcre-to-elisp))
+
+(defun rxt-convert-to-rx ()
+  "Convert regex at point to RX syntax. Chooses Emacs or PCRE syntax by major mode."
+  (interactive)
+  (rxt-mode-dispatch rxt-elisp-to-rx rxt-pcre-to-rx))
+
+(define-minor-mode rxt-mode
+  "Regex translation utilities." nil nil
+  :keymap 'rxt-mode-map)
+
+(defvar rxt-mode-map
+  (let ((map (make-sparse-keymap)))
+    ;; Generic
+    (define-key map (kbd "C-c / /") 'rxt-explain)
+    (define-key map (kbd "C-c / c") 'rxt-convert-syntax)
+    (define-key map (kbd "C-c / x") 'rxt-convert-to-rx)
+
+    ;; From PCRE
+    (define-key map (kbd "C-c / p e") 'rxt-pcre-to-elisp)
+    (define-key map (kbd "C-c / p x") 'rxt-pcre-to-rx)
+    (define-key map (kbd "C-c / p s") 'rxt-pcre-to-sre)
+
+    ;; From Elisp
+    (define-key map (kbd "C-c / e p") 'rxt-elisp-to-pcre)
+    (define-key map (kbd "C-c / e x") 'rxt-elisp-to-rx)
+    (define-key map (kbd "C-c / e s") 'rxt-elisp-to-sre)
+
+    map)
+  "Keymap for `rxt-mode'.")
+
+(defun turn-on-rxt-mode ()
+  "Turn on `rxt-mode' in the current buffer."
+  (interactive)
+  (rxt-mode 1))
+
+(define-globalized-minor-mode rxt-global-mode rxt-mode
+  turn-on-rxt-mode)
 
 ;; Major mode for displaying pretty-printed S-exp syntax
 (define-derived-mode rxt-help-mode emacs-lisp-mode "Regexp Explain"
