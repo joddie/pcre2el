@@ -380,9 +380,11 @@ these commands only."
          
            (t
             (condition-case nil
-                (let ((re (eval (preceding-sexp))))
-                  (if (stringp re) re
-                    (read-string prompt)))
+                (save-excursion
+                  (while (nth 3 (syntax-ppss)) (forward-char))
+                  (let ((re (eval (preceding-sexp))))
+                    (if (stringp re) re
+                      (read-string prompt))))
               (error
                (read-string prompt))))))))
 
