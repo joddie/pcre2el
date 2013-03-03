@@ -589,7 +589,9 @@ interactively."
           (inhibit-read-only t))
       (erase-buffer)
       (rxt-help-mode) 
-      (insert (format ";; %s\n\n" regexp))
+      (insert ";; ")
+      (rxt--insert-displaying-escapes regexp)
+      (newline 2)
       (save-excursion
         (let ((sexp-begin (point)))          
           (rxt-print-rx rx)
@@ -598,6 +600,20 @@ interactively."
           (widen)))
       (rxt-highlight-text))
     (pop-to-buffer (current-buffer))))
+
+(defun rxt--display-character-as (begin end char display)
+  (save-excursion
+    (goto-char begin)
+    (while (search-forward char end t)
+      (let ((ol (make-overlay (match-beginning 0) (match-end 0))))
+        (overlay-put ol 'display display)))))
+
+(defun rxt--insert-displaying-escapes (str)
+  (let ((begin (point)))
+    (insert str)
+    (rxt--display-character-as begin (point) "\n" "\\n")
+    (rxt--display-character-as begin (point) "\t" "\\t")
+    (rxt--display-character-as begin (point) "\f" "\\f")))
 
 (defun* rxt-print-rx (rx &optional (depth 0))
   "Print RX like `print', adding text overlays for corresponding source locations."
