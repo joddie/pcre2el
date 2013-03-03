@@ -575,7 +575,9 @@ interactively."
 ;; Hack: stop paredit-mode interfering with `rxt-print-rx'
 (add-hook 'rxt-help-mode-hook
           (lambda ()
-              (if paredit-mode (paredit-mode 0))))
+            (if (and (boundp 'paredit-mode)
+                     paredit-mode)
+                (paredit-mode 0))))
 
 (define-key rxt-help-mode-map "q" 'quit-window)
 (define-key rxt-help-mode-map "z" 'kill-this-buffer)
