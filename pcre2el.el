@@ -593,10 +593,6 @@ the kill ring; see the two functions named above for details."
   (interactive)
   (rxt-mode-dispatch rxt-elisp-to-rx rxt-pcre-to-rx))
 
-(define-minor-mode rxt-mode
-  "Regex translation utilities." nil nil
-  :keymap 'rxt-mode-map)
-
 (defvar rxt-mode-map
   (let ((map (make-sparse-keymap)))
     ;; Generic
@@ -616,6 +612,10 @@ the kill ring; see the two functions named above for details."
 
     map)
   "Keymap for `rxt-mode'.")
+
+(define-minor-mode rxt-mode
+  "Regex translation utilities." nil nil
+  :keymap 'rxt-mode-map)
 
 (defun turn-on-rxt-mode ()
   "Turn on `rxt-mode' in the current buffer."
