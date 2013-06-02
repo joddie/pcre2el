@@ -566,6 +566,48 @@ interactively."
         (rxt-verbose-rx-translation rxt-explain-verbosely))
     (rxt-pp-rx regexp (rxt-pcre-to-rx regexp flags))))
 
+;;;###autoload
+(defun rxt-toggle-elisp-rx ()
+  "Toggle the regexp near point between Elisp string and rx syntax."
+  (interactive)
+  ;; First, position point before the regex form near point (either
+  ;; a string literal or a list beginning `rx' or `rx-to-string').
+  (let* ((context (syntax-ppss))
+         (string-start (nth 8 context)))
+    (cond (string-start (goto-char string-start))
+          ((looking-back "\"") (backward-sexp))
+          ((looking-at "\"") nil)
+          (t
+           ;; Search backwards, leaving point in place on error
+           (goto-char
+            (save-excursion
+              (skip-syntax-forward "-")
+              (while (not (looking-at
+                           (rx "(" (or "rx" "rx-to-string") symbol-end)))
+                (backward-up-list))
+              (point))))))
+
+  ;; Read and replace the regex following point
+  (let* ((regex (read (current-buffer)))
+         (print-escape-newlines t))
+    (save-excursion
+      (if (listp regex)
+          ;; Replace rx form with string value
+          (prin1 (eval regex) (current-buffer))
+        ;; Pretty-print rx form
+        (save-restriction
+          (let ((start (point)))
+            (prin1 `(rx ,(rxt-elisp-to-rx regex)) (current-buffer))
+            (narrow-to-region start (point)))
+          (pp-buffer)
+          ;; remove the extra newline that pp-buffer inserts
+          (goto-char (point-max))
+          (delete-region
+           (point)
+           (save-excursion (skip-chars-backward " \t\n") (point))))))
+    (kill-sexp -1)
+    (indent-pp-sexp)))
+
 
 ;;; Minor mode and keybindings
 
@@ -629,6 +671,8 @@ the kill ring; see the two functions named above for details."
     (define-key map (kbd "C-c / e x") 'rxt-elisp-to-rx)
     (define-key map (kbd "C-c / e s") 'rxt-elisp-to-sre)
     (define-key map (kbd "C-c / e '") 'rxt-pcre-to-strings)
+    (define-key map (kbd "C-c / e t") 'rxt-toggle-elisp-rx)
+    (define-key map (kbd "C-c / t") 'rxt-toggle-elisp-rx)
 
     map)
   "Keymap for `rxt-mode'.")
