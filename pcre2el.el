@@ -6,7 +6,7 @@
 ;; Hacked additionally by:	opensource at hardakers dot net
 ;; Created:			14 Feb 2012
 ;; Updated:			2 December 2012
-;; Version:                     1.2
+;; Version:                     1.3
 ;; Url:                         https://github.com/joddie/pcre2el
 
 ;; This file is NOT part of GNU Emacs.
@@ -266,7 +266,8 @@
 
 ;;; Code:
 
-(require 'cl)
+(eval-when-compile (require 'cl-macs))
+(require 'cl-lib)
 (require 'rx)
 (require 're-builder)
 
@@ -281,8 +282,9 @@
   :link '(url-link :tag "web page" "https://github.com/joddie/pcre2el"))
 
 (defface rxt-highlight
-  '((t :inherit highlight))
-  ""
+  '((((min-colors 16581375) (background light)) :background "#eee8d5")
+    (((min-colors 16581375) (background dark)) :background "#222222"))
+  "Face for highlighting corresponding regex syntax in `rxt-explain' buffers."
   :group 'rxt)
 
 (defcustom rxt-verbose-rx-translation nil
@@ -336,24 +338,30 @@ these commands only."
 ;; literal. If type is `emacs', copy both the string value (for use in
 ;; interactive commands) and a readable string literal (for yanking
 ;; into source buffers.
-(eval-when-compile
-  (defmacro rxt-value (type expr)
-    (let ((val (make-symbol "val")))
-      `(let ((,val ,expr))
-         (if (called-interactively-p 'any)
-             (let ((lisp-literal (format "%S" ,val)))
-               (message "%s" ,val)
-               ,(case type
-                  (pcre
-                   `(kill-new ,val))
-                  (sexp
-                   `(kill-new lisp-literal))
-                  (emacs
-                   `(progn
-                      (kill-new lisp-literal)
-                      (kill-new ,val)))
-                  (t (error "Bad type: %s" type))))
-           ,val)))))
+(defmacro rxt-value (type expr)
+  (let ((val (make-symbol "val")))
+    `(let ((,val ,expr))
+       (when (called-interactively-p 'any)
+         ,(ecase type
+            (sexp `(rxt--kill-sexp-value ,val))
+            (pcre `(rxt--kill-pcre-value ,val))
+            (emacs `(rxt--kill-lisp-value ,val))))
+       ,val)))
+
+(defun rxt--kill-sexp-value (value)
+  (let ((lisp-literal (prin1-to-string value)))
+    (message "Copied %s to kill-ring" lisp-literal)
+    (kill-new lisp-literal)))
+
+(defun rxt--kill-pcre-value (value)
+  (message "Copied %s to kill-ring" value)
+  (kill-new value))
+
+(defun rxt--kill-lisp-value (value)
+  (let ((lisp-literal (prin1-to-string value)))
+    (message "Copied %s (and string literal) to kill-ring" value)
+    (kill-new lisp-literal)
+    (kill-new value)))
 
 ;; Read an Elisp regexp interactively.
 ;;
@@ -567,6 +575,7 @@ interactively."
        (call-interactively #',elisp-function)
      (call-interactively #',pcre-function)))
 
+;;;###autoload
 (defun rxt-explain () 
   "Pop up a buffer with pretty-printed `rx' syntax for the regex at point.
 
@@ -576,6 +585,7 @@ Chooses regex syntax to read based on current major mode, calling
   (interactive)
   (rxt-mode-dispatch rxt-explain-elisp rxt-explain-pcre))
 
+;;;###autoload
 (defun rxt-convert-syntax () 
   "Convert regex at point to other kind of syntax, depending on major mode.
 
@@ -588,10 +598,17 @@ the kill ring; see the two functions named above for details."
   (interactive)
   (rxt-mode-dispatch rxt-elisp-to-pcre rxt-pcre-to-elisp))
 
+;;;###autoload
 (defun rxt-convert-to-rx ()
   "Convert regex at point to RX syntax. Chooses Emacs or PCRE syntax by major mode."
   (interactive)
   (rxt-mode-dispatch rxt-elisp-to-rx rxt-pcre-to-rx))
+
+;;;###autoload
+(defun rxt-convert-to-strings ()
+  "Convert regex at point to RX syntax. Chooses Emacs or PCRE syntax by major mode."
+  (interactive)
+  (rxt-mode-dispatch rxt-elisp-to-strings rxt-pcre-to-strings))
 
 (defvar rxt-mode-map
   (let ((map (make-sparse-keymap)))
@@ -599,29 +616,33 @@ the kill ring; see the two functions named above for details."
     (define-key map (kbd "C-c / /") 'rxt-explain)
     (define-key map (kbd "C-c / c") 'rxt-convert-syntax)
     (define-key map (kbd "C-c / x") 'rxt-convert-to-rx)
+    (define-key map (kbd "C-c / '") 'rxt-convert-to-strings)
 
     ;; From PCRE
     (define-key map (kbd "C-c / p e") 'rxt-pcre-to-elisp)
     (define-key map (kbd "C-c / p x") 'rxt-pcre-to-rx)
     (define-key map (kbd "C-c / p s") 'rxt-pcre-to-sre)
+    (define-key map (kbd "C-c / p '") 'rxt-pcre-to-strings)
 
     ;; From Elisp
     (define-key map (kbd "C-c / e p") 'rxt-elisp-to-pcre)
     (define-key map (kbd "C-c / e x") 'rxt-elisp-to-rx)
     (define-key map (kbd "C-c / e s") 'rxt-elisp-to-sre)
+    (define-key map (kbd "C-c / e '") 'rxt-pcre-to-strings)
 
     map)
   "Keymap for `rxt-mode'.")
 
+;;;###autoload
 (define-minor-mode rxt-mode
-  "Regex translation utilities." nil nil
-  :keymap 'rxt-mode-map)
+  "Regex translation utilities." nil nil)
 
 (defun turn-on-rxt-mode ()
   "Turn on `rxt-mode' in the current buffer."
   (interactive)
   (rxt-mode 1))
 
+;;;###autoload
 (define-globalized-minor-mode rxt-global-mode rxt-mode
   turn-on-rxt-mode)
 
@@ -648,7 +669,6 @@ the kill ring; see the two functions named above for details."
           (inhibit-read-only t))
       (erase-buffer)
       (rxt-help-mode) 
-      (insert ";; ")
       (rxt--insert-displaying-escapes regexp)
       (newline 2)
       (save-excursion
@@ -699,8 +719,8 @@ the kill ring; see the two functions named above for details."
       (let* ((sexp-begin (copy-marker begin t))
              (sexp-end (copy-marker (point)))
              (sexp-bounds (list sexp-begin sexp-end))
-             (source-begin (+ 4 (rxt-syntax-tree-begin re)))
-             (source-end (+ 4 (rxt-syntax-tree-end re)))
+             (source-begin (rxt-syntax-tree-begin re))
+             (source-end (rxt-syntax-tree-end re))
              (source-bounds (list source-begin source-end))
              (bounds (list source-bounds sexp-bounds))
              (sexp-ol (make-overlay sexp-begin sexp-end (current-buffer) t nil))
@@ -787,11 +807,12 @@ value of FORMS. Returns `nil' if none of the CASES matches."
   (if (null strs)
       rxt-empty-string
     (let ((result
-           (rxt-string (reduce #'concat strs
+           (rxt-string (cl-reduce #'concat strs
                                :key #'rxt-string-chars))))
       (setf (rxt-syntax-tree-begin result) (rxt-syntax-tree-begin (first strs))
             (rxt-syntax-tree-end result) (rxt-syntax-tree-end (car (last strs))))
       result)))
+
 ;;; Other primitives
 (defstruct (rxt-primitive
 	    (:constructor rxt-primitive (pcre rx &optional (sre rx)))
@@ -1244,8 +1265,8 @@ or a shorthand char-set specifier (see `rxt-char-set')`."
                    (if greedy
                        (if rxt-explain
                            rx           ; Readable but not strictly accurate. Fixme?
-                         `(maximal-match rx))
-                     `(minimal-match rx)))
+                         `(maximal-match ,rx))
+                     `(minimal-match ,rx)))
                (cond
                 ((and (zerop from) (null to))
                  (list (if greedy '* '*?) body))
@@ -1511,7 +1532,7 @@ or a shorthand char-set specifier (see `rxt-char-set')`."
 	 
 ;; Fortunately, easier in PCRE than in POSIX!
 (defun rxt-char-set->pcre/chars (re)
-  (flet
+  (cl-flet
       ((escape
 	(char)
 	(let ((s (char-to-string char)))
@@ -1560,7 +1581,7 @@ or a shorthand char-set specifier (see `rxt-char-set')`."
     (error "Can't generate matches for %s" re))))
 
 (defun rxt-concat-product (heads tails)
-  (mapcan
+  (cl-mapcan
    (lambda (hs)
      (mapcar
       (lambda (ts) (concat hs ts))
@@ -1595,7 +1616,7 @@ or a shorthand char-set specifier (see `rxt-char-set')`."
    ((= to from) (rxt-repeat-n->strings from strings))
    (t 					; to > from
     (let* ((strs-n (rxt-repeat-n->strings from strings))
-	   (accum (copy-list strs-n)))
+	   (accum (cl-copy-list strs-n)))
       (dotimes (i (- to from))
 	(setq strs-n (rxt-concat-product strs-n strings))
 	(setq accum (nconc accum strs-n)))
