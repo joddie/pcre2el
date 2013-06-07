@@ -25,10 +25,10 @@
 ;; You should have received a copy of the GNU General Public License
 ;; along with this program.  If not, see `http://www.gnu.org/licenses/'.
 
-;; This file incorporates work covered by the following copyright and  
-;; permission notice: 
+;; This file incorporates work covered by the following copyright and
+;; permission notice:
 ;;
-;; Copyright (c) 1993-2002 Richard Kelsey and Jonathan Rees 
+;; Copyright (c) 1993-2002 Richard Kelsey and Jonathan Rees
 ;; Copyright (c) 1994-2002 by Olin Shivers and Brian D. Carlstrom.
 ;; Copyright (c) 1999-2002 by Martin Gasbichler.
 ;; Copyright (c) 2001-2002 by Michael Sperber.
@@ -59,7 +59,7 @@
 
 ;;; Commentary:
 ;;
-;; 1.1 Overview 
+;; 1.1 Overview
 ;; =============
 ;;    This library provides Emacs support for a limited subset of
 ;;    Perl-compatible regular expression (PCRE) syntax by translating
@@ -72,7 +72,7 @@
 ;;    parsed and converted is the following:
 ;;
 ;;   - parenthesis grouping `( .. )', including shy matches `(?: ... )'
-;;   - backreferences (various syntaxes), but only up to 9 per expression    
+;;   - backreferences (various syntaxes), but only up to 9 per expression
 ;;   - alternation `|'
 ;;   - greedy and non-greedy quantifiers `*', `*?', `+', `+?', `?' and `??'
 ;;     (all of which are the same in Elisp as in PCRE)
@@ -94,7 +94,7 @@
 ;;   - comments `(?# ... )'
 ;;
 ;;
-;; 1.2 Usage 
+;; 1.2 Usage
 ;; ==========
 ;;    Example of using the conversion functions:
 ;;    (rxt-pcre-to-elisp "(abc|def)\\w+\\d+")
@@ -122,7 +122,7 @@
 ;;    (rxt-elisp-to-strings "\\(?:cat\\(?:atonic\\|erpillar\\)?\\)")
 ;;        ;; => '("cat" "caterpillar" "catatonic")
 ;;
-;; 1.2.1 Interactive usage 
+;; 1.2.1 Interactive usage
 ;; ------------------------
 ;;     The translation functions can all be used interactively. You can
 ;;     choose your own key bindings for them. ;^) In interactive use they
@@ -137,7 +137,7 @@
 ;;     - With neither a prefix arg nor an active region, the commands
 ;;       that take an Emacs regexp as input behave like `C-x C-e': they
 ;;       use the result of evaluating the sexp before point (which could
-;;       be a string literal). 
+;;       be a string literal).
 ;;     - PCRE translators called without prefix arg or active region
 ;;       attempt to read a Perl-style delimited regexp literal
 ;;       *following* point in the current buffer, including its
@@ -159,14 +159,14 @@
 ;;     can get the literal regexp by doing `C-y' and the Lisp string by `C-y
 ;;     M-y'.
 ;;
-;; 1.2.2 Query replace 
+;; 1.2.2 Query replace
 ;; --------------------
 ;;     You may want to perform the following key bindings if you prefer
 ;;     PCRE generally over the Emacs counterparts:
 ;;
 ;;     (global-set-key [(meta %)] 'pcre-query-replace-regexp)
 ;;
-;; 1.2.3 RE-Builder support 
+;; 1.2.3 RE-Builder support
 ;; -------------------------
 ;;     The Emacs RE-Builder comes with support for multiple syntaxes via
 ;;     `reb-change-syntax' (`C-c TAB'). It supports Elisp read and
@@ -177,7 +177,7 @@
 ;;     rx syntaxes. PCRE mode reads a delimited literal `/ ... /', and
 ;;     should support using the `x' and `s' flags.
 ;;
-;; 1.2.4 Explain regexps 
+;; 1.2.4 Explain regexps
 ;; ----------------------
 ;;     Two commands, `rxt-explain-elisp' and `rxt-explain-pcre', can help
 ;;     untangle long regexps found in the wild. They read a regexp
@@ -185,7 +185,7 @@
 ;;     `rx' S-expressions, and put the pretty-printed result in a new
 ;;     buffer. This is a work in progress.
 ;;
-;; 1.3 Internal details 
+;; 1.3 Internal details
 ;; =====================
 ;;    Internally, `pcre2el' defines a set of abstract data types for
 ;;    regular expressions, parsers from Elisp and PCRE syntax to the ADT,
@@ -209,7 +209,7 @@
 ;;    and Perl regexp assertions. Otherwise, only the bare minimum of
 ;;    scsh's abstract data type is implemented.
 ;;
-;; 1.4 Caveat 
+;; 1.4 Caveat
 ;; ===========
 ;;    Having two incompatible regexp syntaxes in Lisp source code would
 ;;    be confusing for everyone. Please don't use this library to include
@@ -225,7 +225,7 @@
 ;;    various searches (regexp, literal, skip-syntax-forward,
 ;;    sexp-movement functions, etc.) </soapbox>
 ;;
-;; 1.5 Bugs and Limitations 
+;; 1.5 Bugs and Limitations
 ;; =========================
 ;;    - Not namespace clean (`rxt-' and `pcre-'). Dunno which is better.
 ;;    - The order of alternatives and characters in char classes
@@ -248,7 +248,7 @@
 ;;      the "backtracking control verbs" `(* ...)' . There are better ways
 ;;      to do those things in Elisp, anyway (IMHO ;^)
 ;;
-;; 1.5.1 TODO : 
+;; 1.5.1 TODO :
 ;; -------------
 ;;    - improve error reporting
 ;;    - PCRE `\L', `\U', `\l', `\u' case modifiers
@@ -256,7 +256,7 @@
 ;;    - PCREs in isearch mode
 ;;    - many other things
 ;;
-;; 1.6 History 
+;; 1.6 History
 ;; ============
 ;;    This was originally created out of an answer to a stackoverflow
 ;;    question:
@@ -342,7 +342,7 @@ these commands only."
 
 ;; Read an Elisp regexp interactively.
 ;;
-;; Three possibilities: 
+;; Three possibilities:
 ;;
 ;; 1) With a prefix arg, reads literally from the minibuffer, w/o
 ;; using string syntax -- just like query-replace-regexp, etc.
@@ -362,7 +362,7 @@ these commands only."
 
            ((use-region-p)
             (buffer-substring-no-properties (region-beginning) (region-end)))
-         
+
            (t
             (condition-case nil
                 (save-excursion
@@ -383,7 +383,7 @@ these commands only."
 ;; Returns two values: the regexp and the flags, if any.
 ;;
 ;; TODO: Different delimiters
-;; 
+;;
 (defun rxt-interactive/pcre (&optional prompt)
   (let ((prompt (or prompt "PCRE regexp: ")))
     (cond (current-prefix-arg
@@ -399,7 +399,7 @@ these commands only."
                (rxt-read-delimited-pcre)
              (error
               (list (read-string prompt) "")))))))
-              
+
 ;; Macro: interactively call one of two functions depending on the
 ;; major mode
 (defmacro rxt-mode-dispatch (elisp-function pcre-function)
@@ -433,7 +433,7 @@ these commands only."
            (if (and transient-mark-mode mark-active)
                (region-end)))))
   (query-replace-regexp (pcre-to-elisp regexp) to-string delimited start end))
-   
+
 
 ;;; Commands that translate Elisp to other formats
 
@@ -602,7 +602,7 @@ Throws an error if PCRE contains any infinite quantifiers."
 ;; highlighting corresponding pieces of syntax at point.
 (defvar rxt-explain nil)
 (defvar rxt-explain-hash-map (make-hash-table :weakness 'key))
-         
+
 (defvar rxt-highlight-overlays nil
   "List of active location-highlighting overlays in rxt-help-mode buffer.")
 
@@ -636,7 +636,7 @@ interactively."
 ;;;; Commands that depend on the major mode in effect
 
 ;;;###autoload
-(defun rxt-explain () 
+(defun rxt-explain ()
   "Pop up a buffer with pretty-printed `rx' syntax for the regex at point.
 
 Chooses regex syntax to read based on current major mode, calling
@@ -646,7 +646,7 @@ Chooses regex syntax to read based on current major mode, calling
   (rxt-mode-dispatch rxt-explain-elisp rxt-explain-pcre))
 
 ;;;###autoload
-(defun rxt-convert-syntax () 
+(defun rxt-convert-syntax ()
   "Convert regex at point to other kind of syntax, depending on major mode.
 
 For buffers in `emacs-lisp-mode' or `lisp-interaction-mode',
@@ -735,17 +735,17 @@ the kill ring; see the two functions named above for details."
 (define-key rxt-help-mode-map "q" 'quit-window)
 (define-key rxt-help-mode-map "z" 'kill-this-buffer)
 
-(defun rxt-pp-rx (regexp rx)  
+(defun rxt-pp-rx (regexp rx)
   "Display string regexp REGEXP with its `rx' form RX in an `rxt-help-mode' buffer."
   (with-current-buffer (get-buffer-create "* Regexp Explain *")
     (let ((print-escape-newlines t)
           (inhibit-read-only t))
       (erase-buffer)
-      (rxt-help-mode) 
+      (rxt-help-mode)
       (rxt--insert-displaying-escapes regexp)
       (newline 2)
       (save-excursion
-        (let ((sexp-begin (point)))          
+        (let ((sexp-begin (point)))
           (rxt-print-rx rx)
           (narrow-to-region sexp-begin (point))
           (pp-buffer)
@@ -772,19 +772,19 @@ the kill ring; see the two functions named above for details."
   (let ((re (gethash rx rxt-explain-hash-map))
         (begin (point)))
     (if (consp rx)
-        (progn 
+        (progn
           (insert "(")
           (cl-loop for tail on rx
-                do
-                (let ((hd (car tail))
-                      (tl (cdr tail)))
-                  (rxt-print-rx hd (+ depth 1))
-                  (if tl
-                      (if (consp tl)
-                          (insert " ")
-                        (insert " . ")
-                        (rxt-print-rx tl (+ depth 1))) 
-                    (insert ")")))))
+                   do
+                   (let ((hd (car tail))
+                         (tl (cdr tail)))
+                     (rxt-print-rx hd (+ depth 1))
+                     (if tl
+                         (if (consp tl)
+                             (insert " ")
+                           (insert " . ")
+                           (rxt-print-rx tl (+ depth 1)))
+                       (insert ")")))))
       (prin1 rx (current-buffer)))
     (when (and re
                (rxt-syntax-tree-begin re)
@@ -809,7 +809,7 @@ the kill ring; see the two functions named above for details."
     (mapc #'delete-overlay rxt-highlight-overlays)
     (setq rxt-highlight-overlays nil)
     (dolist (bounds all-bounds)
-      (cl-destructuring-bind (begin end) bounds 
+      (cl-destructuring-bind (begin end) bounds
         (let ((overlay (make-overlay begin end)))
           (push overlay rxt-highlight-overlays)
           (overlay-put overlay 'face 'rxt-highlight))))))
@@ -820,14 +820,14 @@ the kill ring; see the two functions named above for details."
 ;; Base class that keeps the source text as a string with offsets
 ;; beginning and ending parsed portion
 (cl-defstruct
-  rxt-syntax-tree
+    rxt-syntax-tree
   begin end source)
 
 ;; Literal string
 (cl-defstruct
-  (rxt-string
-   (:constructor rxt-string (chars))
-   (:include rxt-syntax-tree))
+    (rxt-string
+     (:constructor rxt-string (chars))
+     (:include rxt-syntax-tree))
   chars)
 
 (defvar rxt-empty-string (rxt-string ""))
@@ -841,15 +841,15 @@ the kill ring; see the two functions named above for details."
       rxt-empty-string
     (let ((result
            (rxt-string (cl-reduce #'concat strs
-                               :key #'rxt-string-chars))))
+                                  :key #'rxt-string-chars))))
       (setf (rxt-syntax-tree-begin result) (rxt-syntax-tree-begin (car strs))
             (rxt-syntax-tree-end result) (rxt-syntax-tree-end (car (last strs))))
       result)))
 
 ;;; Other primitives
 (cl-defstruct (rxt-primitive
-	    (:constructor rxt-primitive (pcre rx &optional (sre rx)))
-            (:include rxt-syntax-tree))
+               (:constructor rxt-primitive (pcre rx &optional (sre rx)))
+               (:include rxt-syntax-tree))
   pcre rx sre)
 
 (defvar rxt-bos (rxt-primitive "\\A" 'bos))
@@ -877,9 +877,9 @@ the kill ring; see the two functions named above for details."
 
 ;;; Sequence
 (cl-defstruct
-  (rxt-seq
-   (:constructor make-rxt-seq (elts))
-   (:include rxt-syntax-tree))
+    (rxt-seq
+     (:constructor make-rxt-seq (elts))
+     (:include rxt-syntax-tree))
   elts)
 
 ;; Slightly smart sequence constructor:
@@ -913,9 +913,9 @@ the kill ring; see the two functions named above for details."
 
 ;;; Choice
 (cl-defstruct
-  (rxt-choice
-   (:constructor make-rxt-choice (elts))
-   (:include rxt-syntax-tree))
+    (rxt-choice
+     (:constructor make-rxt-choice (elts))
+     (:include rxt-syntax-tree))
   elts)
 
 ;;; The empty choice represents a regexp that never matches in any context
@@ -925,7 +925,7 @@ the kill ring; see the two functions named above for details."
    (and (rxt-choice-p re)
         (null (rxt-choice-elts re)))
    (rxt-empty-char-set-p re)))
-  
+
 ;; Slightly smart choice constructor:
 ;; -- flattens nested choices
 ;; -- drops never-matching (empty) REs
@@ -968,20 +968,20 @@ the kill ring; see the two functions named above for details."
 
               ((rxt-char-set-union-p re) ; Fold char sets together
                (list tail
-                       (rxt-char-set-adjoin! cset re)))
+                     (rxt-char-set-adjoin! cset re)))
 
               ((and (rxt-string-p re)   ; Same for 1-char strings
                     (= 1 (length (rxt-string-chars re))))
                (list tail
-                       (rxt-char-set-adjoin! cset
-                                             (rxt-string-chars re))))
+                     (rxt-char-set-adjoin! cset
+                                           (rxt-string-chars re))))
 
 	      (t                        ; Otherwise.
                (list (cons re tail) cset)))))))
 
 ;;; Repetition
 (cl-defstruct (rxt-repeat
-            (:include rxt-syntax-tree))
+               (:include rxt-syntax-tree))
   from to body greedy)
 
 (cl-defun rxt-repeat (from to body &optional (greedy t))
@@ -992,21 +992,21 @@ the kill ring; see the two functions named above for details."
 
 ;;; Submatch
 (cl-defstruct
-  (rxt-submatch
-   (:constructor rxt-submatch (body))
-   (:include rxt-syntax-tree))
+    (rxt-submatch
+     (:constructor rxt-submatch (body))
+     (:include rxt-syntax-tree))
   body)
 
 ;;; Backreference
 (cl-defstruct
-  (rxt-backref
-   (:constructor rxt-backref (n))
-   (:include rxt-syntax-tree))
+    (rxt-backref
+     (:constructor rxt-backref (n))
+     (:include rxt-syntax-tree))
   n)
 
 ;;; Syntax classes (Emacs only)
 (cl-defstruct (rxt-syntax-class
-            (:include rxt-syntax-tree))
+               (:include rxt-syntax-tree))
   symbol)
 
 (defun rxt-syntax-class (symbol)
@@ -1016,7 +1016,7 @@ the kill ring; see the two functions named above for details."
 
 ;;; Character categories (Emacs only)
 (cl-defstruct (rxt-char-category
-            (:include rxt-syntax-tree))
+               (:include rxt-syntax-tree))
   symbol)
 
 (defun rxt-char-category (symbol)
@@ -1026,7 +1026,7 @@ the kill ring; see the two functions named above for details."
 
 
 ;;; Char sets
-;; <rxt-char-set> ::= <rxt-char-set-union> 
+;; <rxt-char-set> ::= <rxt-char-set-union>
 ;;                  | <rxt-char-set-negation>
 ;;                  | <rxt-choice> ; where all rxt-choice-elts are char sets
 ;;                  | <rxt-char-set-intersection>
@@ -1044,7 +1044,7 @@ the kill ring; see the two functions named above for details."
 ;; that can be represented in string notation as a class [ ... ]
 ;; without the negation operator.
 (cl-defstruct (rxt-char-set-union
-            (:include rxt-syntax-tree))
+               (:include rxt-syntax-tree))
   chars					; list of single characters
   ranges				; list of ranges (from . to)
   classes)				; list of character classes
@@ -1071,7 +1071,7 @@ unchanged."
     (make-rxt-char-set-union :chars (list item)))
 
    ((consp item)
-    (if (consp (cdr item))              
+    (if (consp (cdr item))
 	(make-rxt-char-set-union :chars item)         ; list of chars
       (make-rxt-char-set-union :ranges (list item)))) ; range (from . to)
 
@@ -1083,11 +1083,11 @@ unchanged."
 
    (t
     (error "Can't construct character set union from %S" item))))
-	  
+
 ;;; Generalized union constructor: falls back to rxt-choice if
 ;;; necessary
 (defun rxt-char-set-union (csets)
-  (let ((union (make-rxt-char-set-union))) 
+  (let ((union (make-rxt-char-set-union)))
     (dolist (cset csets)
       (if (and (rxt-char-set-union-p cset)
                (rxt-char-set-union-p union))
@@ -1118,7 +1118,7 @@ modified."
           (rxt-char-set-adjoin! cset char))
       (push item (rxt-char-set-union-ranges cset)))) ; range (from . to)
 
-   ((stringp item) 
+   ((stringp item)
     (mapc (lambda (char)
             (rxt-char-set-adjoin! cset char))
           item))
@@ -1143,9 +1143,9 @@ modified."
 
 ;; In general, all character sets that can be represented in string
 ;; notation as [^ ... ] (but see `rxt-char-set-intersection', below), plus
-;; Emacs' \Sx and \Cx constructions. 
+;; Emacs' \Sx and \Cx constructions.
 (cl-defstruct (rxt-char-set-negation
-            (:include rxt-syntax-tree))
+               (:include rxt-syntax-tree))
   elt)
 
 ;; Complement constructor: checks types, unwraps existing negations
@@ -1169,7 +1169,7 @@ or a shorthand char-set specifier (see `rxt-char-set')`."
 
 	(t
 	 (error "Can't negate non-char-set or syntax class %s" cset))))
-  
+
 ;;; Intersections of char sets
 
 ;; These are difficult to represent in general, but can be constructed
@@ -1179,7 +1179,7 @@ or a shorthand char-set specifier (see `rxt-char-set')`."
 ;; == (- word ("abc"))
 
 (cl-defstruct (rxt-char-set-intersection
-            (:include rxt-syntax-tree))
+               (:include rxt-syntax-tree))
   elts)
 
 ;; Intersection constructor
@@ -1191,7 +1191,7 @@ or a shorthand char-set specifier (see `rxt-char-set')`."
        ((rxt-char-set-negation-p cset)
 	;; Fold negated charsets together: ~A & ~B = ~(A|B)
 	(setq cmpl (rxt-char-set-adjoin! cmpl (rxt-char-set-negation-elt cset))))
-       
+
        ((rxt-char-set-union-p cset)
 	(push cset elts))
 
@@ -1204,7 +1204,7 @@ or a shorthand char-set specifier (see `rxt-char-set')`."
       (if (null (cdr elts))
 	  (car elts)			; singleton case
 	(make-rxt-char-set-intersection :elts elts)))))
-	
+
 ;; Constructor helper: flatten nested intersections
 (defun rxt-int-flatten (csets)
   (if (consp csets)
@@ -1317,10 +1317,10 @@ Returns two strings: the regexp and the flags."
         (search-forward-regexp delim)
         (let ((end (match-beginning 1)))
           (when is-subst (search-forward-regexp delim))
-        (let ((pcre (buffer-substring-no-properties beg end)))
-          (rxt-token-case
-           ("[gimosx]*"
-            (list pcre (match-string-no-properties 0))))))))))
+          (let ((pcre (buffer-substring-no-properties beg end)))
+            (rxt-token-case
+             ("[gimosx]*"
+              (list pcre (match-string-no-properties 0))))))))))
 
 
 ;;;; Parser constants
@@ -1543,7 +1543,7 @@ otherwise it would not match.")
       (rxt-parse-atom/el branch-begin))))
 
 (defun rxt-parse-atom/common ()
-  (rxt-fontify-token-case 
+  (rxt-fontify-token-case
    ((rx "[")   (cons 'font-lock-builtin-face (rxt-parse-char-class)))
    ((rx "\\b") (cons 'font-lock-constant-face rxt-word-boundary))
    ((rx "\\B") (cons 'font-lock-constant-face rxt-not-word-boundary))))
@@ -1746,7 +1746,7 @@ in character classes as outside them."
                              'font-lock-comment-face)
           (cl-return rxt-empty-string))
          ;; Set modifiers (?xs-sx ... )
-         ((rx (or 
+         ((rx (or
                (seq (group (* (any "xs"))) "-" (group (+ (any "xs"))))
                (seq (group (+ (any "xs"))))))
           (let ((begin (match-beginning 0))
@@ -1804,7 +1804,7 @@ in character classes as outside them."
    (rxt-m-to-n-brace-regexp
     (cons 'font-lock-keyword-face
           (list (string-to-number (match-string 1))
-                  (string-to-number (match-string 2)))))
+                (string-to-number (match-string 2)))))
    (rxt-m-to-?-brace-regexp
     (cons 'font-lock-keyword-face
           (list (string-to-number (match-string 1)) nil)))
@@ -1818,7 +1818,7 @@ in character classes as outside them."
       (error "Bad brace expression {%s"
              (buffer-substring-no-properties begin (point)))))))
 
-;; Parse a character set range [...]		 
+;; Parse a character set range [...]
 (defun rxt-parse-char-class ()
   (when (eobp)
     (error "Missing close right bracket in regexp"))
@@ -1838,7 +1838,7 @@ in character classes as outside them."
        (while t
          (when (eobp)
            (error "Missing close right bracket in regexp"))
-	
+
          (if (and (looking-at "\\]")
                   (not (= (point) begin)))
              (throw 'done result)
@@ -1877,7 +1877,7 @@ in character classes as outside them."
 ;; functions.
 (defun rxt-parse-char-class-atom ()
   (or
-   ;; First, check for PCRE-specific backslash sequences 
+   ;; First, check for PCRE-specific backslash sequences
    (and rxt-parse-pcre
         (rxt-parse-char-class-atom/pcre))
    ;; Char-class syntax
@@ -1895,7 +1895,7 @@ in character classes as outside them."
      (error "%s collation syntax not supported" (match-string 0)))
     ;; Other characters stand for themselves
     ((rx (or "\n" nonl))
-     (cons nil (string-to-char (match-string 0)))))))
+     (cons font-lock-string-face (string-to-char (match-string 0)))))))
 
 ;; Parse backslash escapes inside PCRE character classes
 (defun rxt-parse-char-class-atom/pcre ()
@@ -1958,7 +1958,7 @@ in character classes as outside them."
     (bow . word-start)
     (eow . word-end)
     (seq . sequence))
-  "Alist of verbose equivalents for short `rx' primitives.") 
+  "Alist of verbose equivalents for short `rx' primitives.")
 
 (defun rxt-rx-symbol (sym)
   (if (or rxt-verbose-rx-translation
@@ -2063,7 +2063,7 @@ in character classes as outside them."
 
           (t
            (error "No RX translation for %s" re)))))
-    
+
     ;; Store source information on each fragment of the generated RX
     ;; sexp for rxt-explain mode
     (when rxt-explain
@@ -2071,7 +2071,7 @@ in character classes as outside them."
       ;; occurrences of primitives like `bol'
       (when (symbolp rx)
         (setq rx (make-symbol (symbol-name rx))))
-      (puthash rx re rxt-explain-hash-map)) 
+      (puthash rx re rxt-explain-hash-map))
     rx))
 
 ;;; ADT -> SRE notation
@@ -2130,7 +2130,7 @@ in character classes as outside them."
       (if (> (length all) 1)
 	  (cons '| all)
 	(car all))))
-      
+
    ((rxt-char-set-negation-p re)
     (list '~ (rxt-adt->sre (rxt-char-set-negation-elt re))))
 
@@ -2181,7 +2181,7 @@ in character classes as outside them."
    ((rxt-submatch-p re) (rxt-submatch->pcre re))
    ((rxt-backref-p re)
     (list (format "\\%d" (rxt-backref-n re)) 1))
- 
+
    ((rxt-repeat-p re) (rxt-repeat->pcre re))
 
    ((or (rxt-char-set-union-p re)
@@ -2221,8 +2221,8 @@ in character classes as outside them."
       (cl-multiple-value-bind
 	  (s1 lev1) (rxt-seq-elts->pcre (cdr elts))
 	(list (concat (rxt-paren-if-necessary s lev)
-			(rxt-paren-if-necessary s1 lev1))
-		2)))))
+                      (rxt-paren-if-necessary s1 lev1))
+              2)))))
 
 (defun rxt-paren-if-necessary (s lev)
   (if (< lev 3)
@@ -2234,7 +2234,7 @@ in character classes as outside them."
     (if (null elts)
 	nil
       (rxt-choice-elts->pcre elts))))
-	
+
 (defun rxt-choice-elts->pcre (elts)
   (cl-multiple-value-bind
       (s lev) (rxt-adt->pcre/lev (car elts))
@@ -2264,20 +2264,20 @@ in character classes as outside them."
 	  (setq s (concat "(?:" s ")")
 		lev 0))
 	(list (if to
-		    (cond ((and (= from 0) (= to 1))
-                           (concat s (if greedy "?" "??")))
-			  ((= from to)
-			   (concat s "{" (number-to-string to) "}"))
-			  (t
-			   (concat s "{" (number-to-string from)
-                                   "," (number-to-string to) "}")))
-		  (cond ((= from 0)
-                         (concat s (if greedy "*" "*?")))
-			((= from 1)
-                         (concat s (if greedy "+" "+?")))
-			(t (concat s "{" (number-to-string from) ",}"))))
-		1))))))
-	
+                  (cond ((and (= from 0) (= to 1))
+                         (concat s (if greedy "?" "??")))
+                        ((= from to)
+                         (concat s "{" (number-to-string to) "}"))
+                        (t
+                         (concat s "{" (number-to-string from)
+                                 "," (number-to-string to) "}")))
+                (cond ((= from 0)
+                       (concat s (if greedy "*" "*?")))
+                      ((= from 1)
+                       (concat s (if greedy "+" "+?")))
+                      (t (concat s "{" (number-to-string from) ",}"))))
+              1))))))
+
 (defun rxt-char-set->pcre (re)
   (cond ((rxt-char-set-union-p re)
 	 (list
@@ -2292,7 +2292,7 @@ in character classes as outside them."
 
 	(t
 	 (error "Non-char-set in rxt-char-set->pcre: %s" re))))
-	 
+
 ;; Fortunately, easier in PCRE than in POSIX!
 (defun rxt-char-set->pcre/chars (re)
   (cl-flet
@@ -2384,7 +2384,7 @@ in character classes as outside them."
 	(setq strs-n (rxt-concat-product strs-n strings))
 	(setq accum (nconc accum strs-n)))
       accum))))
-	      
+
 (defun rxt-repeat-n->strings (n strings)
   ;; n > 1
   (cond ((zerop n) '(""))
@@ -2429,7 +2429,7 @@ in character classes as outside them."
 
 (defadvice reb-change-syntax
   (around rxt (&optional syntax) activate compile)
-  "This function is hacked for emulated PCRE syntax and regexp conversion."  
+  "This function is hacked for emulated PCRE syntax and regexp conversion."
   (interactive
    (list (intern
 	  (completing-read (format "Select syntax (%s): " reb-re-syntax)
@@ -2499,7 +2499,7 @@ in character classes as outside them."
                 ((eq reb-re-syntax 'string)
                  (insert "\n\"" re "\""))
 
-                ;; For the Lisp syntax we need the "source" of the regexp 
+                ;; For the Lisp syntax we need the "source" of the regexp
                 ((reb-lisp-syntax-p)
                  (insert (or (reb-target-binding reb-regexp-src)
                              (reb-empty-regexp))))))))
@@ -2517,7 +2517,7 @@ in character classes as outside them."
 
               ((eq reb-re-syntax 'rx)
                (rx-to-string (eval (car (read-from-string re))) t))
-              
+
               ((eq reb-re-syntax 'pcre)
                (rxt-pcre-to-elisp (car re) (cadr re)))
 
@@ -2543,4 +2543,3 @@ in character classes as outside them."
 
 
 ;;; pcre2el.el ends here
-
