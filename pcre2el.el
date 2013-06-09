@@ -734,6 +734,12 @@ the kill ring; see the two functions named above for details."
 
 (define-key rxt-help-mode-map "q" 'quit-window)
 (define-key rxt-help-mode-map "z" 'kill-this-buffer)
+(define-key rxt-help-mode-map "n" 'next-line)
+(define-key rxt-help-mode-map "p" 'previous-line)
+(define-key rxt-help-mode-map "f" 'forward-list)
+(define-key rxt-help-mode-map "b" 'backward-list)
+(define-key rxt-help-mode-map "u" 'backward-up-list)
+(define-key rxt-help-mode-map "d" 'down-list)
 
 (defun rxt-pp-rx (regexp rx)
   "Display string regexp REGEXP with its `rx' form RX in an `rxt-help-mode' buffer."
@@ -765,27 +771,31 @@ the kill ring; see the two functions named above for details."
     (insert str)
     (rxt--display-character-as begin (point) "\n" "\\n")
     (rxt--display-character-as begin (point) "\t" "\\t")
-    (rxt--display-character-as begin (point) "\f" "\\f")))
+    (rxt--display-character-as begin (point) "\f" "\\f")
+    (rxt--display-character-as begin (point) "\r" "\\r")))
 
 (cl-defun rxt-print-rx (rx &optional (depth 0))
   "Print RX like `print', adding text overlays for corresponding source locations."
   (let ((re (gethash rx rxt-explain-hash-map))
         (begin (point)))
-    (if (consp rx)
-        (progn
-          (insert "(")
-          (cl-loop for tail on rx
-                   do
-                   (let ((hd (car tail))
-                         (tl (cdr tail)))
-                     (rxt-print-rx hd (+ depth 1))
-                     (if tl
-                         (if (consp tl)
-                             (insert " ")
-                           (insert " . ")
-                           (rxt-print-rx tl (+ depth 1)))
-                       (insert ")")))))
-      (prin1 rx (current-buffer)))
+    (cl-typecase rx
+      (cons
+       (insert "(")
+       (cl-loop for tail on rx
+                do
+                (let ((hd (car tail))
+                      (tl (cdr tail)))
+                  (rxt-print-rx hd (+ depth 1))
+                  (if tl
+                      (if (consp tl)
+                          (insert " ")
+                        (insert " . ")
+                        (rxt-print-rx tl (+ depth 1)))
+                    (insert ")")))))
+      (string
+       (rxt--insert-displaying-escapes (prin1-to-string rx)))
+      (t
+       (prin1 rx (current-buffer))))
     (when (and re
                (rxt-syntax-tree-begin re)
                (rxt-syntax-tree-end re))
