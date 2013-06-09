@@ -1591,7 +1591,7 @@ otherwise it would not match.")
         ((rx "\\"
              (submatch (any "Ss"))
              (submatch (any "-.w_()'\"$\\/<>|!")))
-         (cons 'font-lock-function-name-face
+         (cons 'font-lock-constant-face
                (let ((negated (string= (match-string 1) "S"))
                      (re
                       (rxt-syntax-class
@@ -1602,7 +1602,7 @@ otherwise it would not match.")
         ((rx "\\"
              (submatch (any "Cc"))
              (submatch nonl))
-         (cons 'font-lock-function-name-face
+         (cons 'font-lock-constant-face
                (let ((negated (string= (match-string 1) "C"))
                      (category
                       (car (rassoc (string-to-char (match-string 2))
