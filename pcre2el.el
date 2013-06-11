@@ -1978,7 +1978,7 @@ in character classes as outside them."
 
   (rxt-syntax-tree-value
    (let* ((negated (rxt-fontify-token-case
-                    ("\\^" (cons 'font-lock-builtin-face t))
+                    ("\\^" (cons 'font-lock-warning-face t))
                     (t (cons nil nil))))
           (begin (point))
           (result (if negated
