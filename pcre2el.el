@@ -1,12 +1,12 @@
-;;; pcre2el.el --- PCRE/Elisp/rx/SRE regexp syntax converter and utilities
+;;; pcre2el.el --- parse, convert, and font-lock PCRE, Emacs and rx regexps
 
 ;; Copyright (C) 2012-2013 Jon Oddie <jonxfield@gmail.com>
 
 ;; Author:			joddie <jonxfield at gmail.com>
 ;; Hacked additionally by:	opensource at hardakers dot net
 ;; Created:			14 Feb 2012
-;; Updated:			2 June 2013
-;; Version:                     1.4
+;; Updated:			15 June 2013
+;; Version:                     1.5
 ;; Url:                         https://github.com/joddie/pcre2el
 ;; Package-Requires:            ((cl-lib "0.3"))
 
