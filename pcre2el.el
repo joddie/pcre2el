@@ -2096,9 +2096,6 @@ in character classes as outside them."
 
 
 
-
-
-
 ;;;; 'Unparsers' to convert the syntax tree back to concrete `rx' or SRE syntax
 
 ;;; ADT -> rx notation
