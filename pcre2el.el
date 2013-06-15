@@ -829,6 +829,8 @@ the kill ring; see the two functions named above for details."
     (define-key map (kbd "C-c / t") 'rxt-toggle-elisp-rx)
     (define-key map (kbd "C-c / h") 'rxt-fontify-regexp-at-point)
 
+    ;; Search
+    (define-key map (kbd "C-c / %") 'pcre-query-replace-regexp)
 
     map)
   "Keymap for `rxt-mode'.")
