@@ -281,7 +281,7 @@
   :link '(emacs-library-link :tag "lisp file" "pcre2el.el")
   :link '(url-link :tag "web page" "https://github.com/joddie/pcre2el"))
 
-(defface rxt-highlight
+(defface rxt-highlight-face
   '((((min-colors 16581375) (background light)) :background "#eee8d5")
     (((min-colors 16581375) (background dark)) :background "#222222"))
   "Face for highlighting corresponding regex syntax in `rxt-explain' buffers."
@@ -825,7 +825,7 @@ the kill ring; see the two functions named above for details."
       (cl-destructuring-bind (begin end) bounds
         (let ((overlay (make-overlay begin end)))
           (push overlay rxt-highlight-overlays)
-          (overlay-put overlay 'face 'rxt-highlight))))))
+          (overlay-put overlay 'face 'rxt-highlight-face))))))
 
 
 ;;;; Regexp syntax tree data type
