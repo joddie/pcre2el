@@ -327,16 +327,19 @@ these commands only."
 
 (defun rxt--kill-sexp-value (value)
   (let ((lisp-literal (prin1-to-string value)))
-    (message "Copied %s to kill-ring" lisp-literal)
+    (message "Copied %s to kill-ring"
+             (propertize lisp-literal 'face 'font-lock-string-face))
     (kill-new lisp-literal)))
 
 (defun rxt--kill-pcre-value (value)
-  (message "Copied %s to kill-ring" value)
+  (message "Copied PCRE %s to kill-ring"
+           (propertize value 'face 'font-lock-string-face))
   (kill-new value))
 
 (defun rxt--kill-lisp-value (value)
   (let ((lisp-literal (prin1-to-string value)))
-    (message "Copied %s (and string literal) to kill-ring" value)
+    (message "Copied Emacs %s + string literal to kill-ring"
+             (propertize value 'face 'font-lock-string-face))
     (kill-new lisp-literal)
     (kill-new value)))
 
@@ -832,6 +835,17 @@ the kill ring; see the two functions named above for details."
 (cl-defstruct
     rxt-syntax-tree
   begin end source)
+
+(defun rxt-syntax-tree-readable (tree)  
+  (cl-assert (rxt-syntax-tree-p tree))
+  (let ((begin (rxt-syntax-tree-begin tree))
+        (end (rxt-syntax-tree-end tree))
+        (source (rxt-syntax-tree-source tree)))
+    (if (and begin end source)
+        (substring source begin end)
+      (let ((print-level 1))
+        (prin1-to-string tree))))) 
+
 
 ;; Literal string
 (cl-defstruct
@@ -2351,7 +2365,8 @@ in character classes as outside them."
    ((rxt-char-set-union-p re) (rxt-char-set->strings re))
 
    (t
-    (error "Can't generate matches for %s" re))))
+    (error "Can't generate productions of %s"
+           (rxt-syntax-tree-readable re)))))
 
 (defun rxt-concat-product (heads tails)
   (cl-mapcan
@@ -2378,8 +2393,8 @@ in character classes as outside them."
   (let ((from (rxt-repeat-from re))
 	(to (rxt-repeat-to re)))
     (if (not to)
-	(error "Can't generate matches for unbounded repeat %s"
-               re)
+	(error "Can't generate all productions of unbounded repeat \"%s\""
+               (rxt-syntax-tree-readable re))
       (let ((strings (rxt-adt->strings (rxt-repeat-body re))))
 	(rxt-repeat-n-m->strings from to strings)))))
 
@@ -2406,7 +2421,8 @@ in character classes as outside them."
 
 (defun rxt-char-set->strings (re)
   (if (rxt-char-set-union-classes re)
-      (error "Can't generate matches for character classes")
+      (error "Can't generate all productions of named character classes in \"%s\""
+             (rxt-syntax-tree-readable re))
     (let ((chars (mapcar #'char-to-string (rxt-char-set-union-chars re))))
       (dolist (range (rxt-char-set-union-ranges re))
 	(let ((end (cdr range)))
