@@ -636,6 +636,133 @@ interactively."
     (rxt-pp-rx regexp (rxt-pcre-to-rx regexp flags))))
 
 
+;;;; Regexp fontification in Elisp buffers
+(defun rxt-fontify-regexp-at-point (remove-all-p)
+  "Toggle parser-based font-locking of the Elisp regexp nearest point.
+
+With prefix argument, removes font-locking for all regexps in the
+current buffer.
+
+As long as regexp font-locking is turned on for a particular
+string, any changes to its contents will be reflected in the
+
+You can enable fontifying for as many regexps as you like, but
+because the font-locking is implemented using overlays, buffer
+updates may become slow if too many are active at once."
+  (interactive "P")
+  (let ((existing-overlay (rxt--get-overlay-at-point)))
+    (cond (remove-all-p (rxt--remove-overlays))
+          (existing-overlay (rxt--delete-overlay existing-overlay))
+          (t
+           (save-excursion
+             ;; Put point before the opening " of the string nearest point
+             (let ((string-start (nth 8 (syntax-ppss))))
+               (cond (string-start (goto-char string-start))
+                     ((looking-back "\"") (backward-sexp))
+                     ((looking-at "\"") nil))
+               (rxt--fontify-regexp-at-point1))))))
+  (set (make-local-variable 'font-lock-syntactic-face-function)
+       'rxt--syntactic-face-function))
+
+(defun rxt--get-overlay-at-point ()
+  (cdr (get-char-property-and-overlay (point) 'rxt-fontified-regexp)))
+
+(defun rxt--delete-overlay (overlay)
+  (save-excursion
+    (let ((start (overlay-start overlay))
+          (end   (overlay-end overlay)))
+      (delete-overlay overlay)
+      (font-lock-fontify-region start end))))
+
+(defun rxt--fontify-regexp-at-point1 ()
+  ;; Point should be before the opening " of an Elisp string. Reads
+  ;; the regexp from the buffer, parses it and copies the
+  ;; fontification back to the buffer.
+  (let ((regex (save-excursion (read (current-buffer)))))
+    (condition-case err
+        (cl-destructuring-bind (ast fontified)
+            (rxt-parse-and-fontify regex)
+          (rxt--copy-fonts-to-read-syntax fontified))
+      (error (message "Invalid regexp: %s" (cadr err))))))
+
+(defun rxt--copy-fonts-to-read-syntax (fontified)
+  (cl-destructuring-bind (begin . end)
+      (bounds-of-thing-at-point 'sexp)
+    (unless (rxt--get-overlay-at-point)
+      (let ((overlay
+             (make-overlay begin end (current-buffer)
+                           t nil)))
+        (overlay-put overlay 'rxt-fontified-regexp t)
+        (overlay-put overlay 'face 'rxt-highlight-face)
+        (overlay-put overlay 'modification-hooks
+                     '(rxt--refontify-regexp))))
+    (skip-syntax-forward "\"")
+    (cl-loop for chunk in (split-string fontified "" t)
+             do
+             (progn
+               (let ((start (point))
+                     (end
+                      (progn
+                        ;; Move point over the next char or escape sequence
+                        (rxt-token-case
+                         ((rx "\\u" (= 4 (any xdigit))))
+                         ((rx "\\U00" (= 6 (any xdigit))))
+                         ((rx "\\" (** 1 3 (any "0-7"))))
+                         ((rx (one-or-more "\\"
+                                           (any "C" "M" "S" "H" "A")
+                                           "-")
+                              any))
+                         ((rx "\\" any))
+                         ((rx any)))
+                        (point)))
+                     (face (get-text-property 0 'font-lock-face chunk)))
+                 (put-text-property start end 'font-lock-face face))))
+    (font-lock-fontify-block 1)))
+
+(defun rxt--remove-overlays ()
+  (save-excursion
+    (save-restriction
+      (widen)
+      (goto-char (point-min))
+      (cl-loop do (goto-char
+                   (next-single-char-property-change
+                    (point) 'rxt-fontified-regexp))
+               until (eobp)
+
+               do (cl-destructuring-bind (prop . overlay)
+                      (get-char-property-and-overlay
+                       (point) 'rxt-fontified-regexp)
+                    (when overlay
+                      (goto-char (overlay-end overlay))
+                      (rxt--delete-overlay overlay)))))
+    (font-lock-fontify-buffer)))
+
+(defvar rxt--timer nil)
+
+(defun rxt--refontify-regexp (overlay after-p start end &optional len)
+  (when rxt--timer
+    (cancel-timer rxt--timer))
+  (setq rxt--timer
+        (run-with-timer 0.1 nil
+                        (apply-partially 'rxt--refontify-regexp1
+                                         overlay))))
+ 
+(defun rxt--refontify-regexp1 (overlay)
+  (let ((start (overlay-start overlay))
+        (end   (overlay-end overlay)))
+    (let ((inhibit-modification-hooks t))
+      (remove-text-properties start end 'font-lock-face)
+      (save-excursion
+        (goto-char start)
+        (rxt--fontify-regexp-at-point1)))))
+
+(defun rxt--syntactic-face-function (context)
+  (if (get-char-property (point) 'rxt-fontified-regexp)
+      nil
+    (lisp-font-lock-syntactic-face-function context)))
+
+
+
 ;;;; Commands that depend on the major mode in effect
 
 ;;;###autoload
@@ -700,6 +827,8 @@ the kill ring; see the two functions named above for details."
     (define-key map (kbd "C-c / e '") 'rxt-pcre-to-strings)
     (define-key map (kbd "C-c / e t") 'rxt-toggle-elisp-rx)
     (define-key map (kbd "C-c / t") 'rxt-toggle-elisp-rx)
+    (define-key map (kbd "C-c / h") 'rxt-fontify-regexp-at-point)
+
 
     map)
   "Keymap for `rxt-mode'.")
