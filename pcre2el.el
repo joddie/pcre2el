@@ -619,7 +619,7 @@ interactively."
   (interactive (rxt-interactive/elisp))
   (let ((rxt-explain t)
         (rxt-verbose-rx-translation rxt-explain-verbosely))
-    (cl-multiple-value-bind (ast fontified)
+    (cl-destructuring-bind (ast fontified)
         (rxt-parse-and-fontify regexp)
       (rxt-pp-rx fontified (rxt-adt->rx ast)))))
 
@@ -1095,7 +1095,7 @@ the kill ring; see the two functions named above for details."
 ;; Flatten any nested rxt-choices amongst RES, and collect any
 ;; charsets together
 (defun rxt-choice-flatten (res)
-  (cl-multiple-value-bind (res cset)
+  (cl-destructuring-bind (res cset)
       (rxt-choice-flatten+char-set res)
     (if (not (rxt-empty-p cset))
         (cons cset res)
@@ -1109,7 +1109,7 @@ the kill ring; see the two functions named above for details."
   (if (null res)
       (list '() (make-rxt-char-set-union))
     (let* ((re (car res)))
-      (cl-multiple-value-bind (tail cset)
+      (cl-destructuring-bind (tail cset)
           (rxt-choice-flatten+char-set (cdr res))
 	(cond ((rxt-choice-p re)        ; Flatten nested choices
 	       (list
@@ -1558,7 +1558,7 @@ otherwise it would not match.")
 (defvar rxt-source-text-string nil)
 
 (defun rxt-parse-re (re &optional pcre flags)
-  (cl-multiple-value-bind (ast fontified)
+  (cl-destructuring-bind (ast fontified)
       (rxt-parse-and-fontify re pcre flags)
     ast))
 
@@ -1679,7 +1679,7 @@ otherwise it would not match.")
    ;; Brace expression "{M,N}", "{M,}", "{M}"
    (rxt-brace-begin-regexp
     (cons 'font-lock-keyword-face
-          (cl-multiple-value-bind (from to)
+          (cl-destructuring-bind (from to)
               (rxt-parse-braces)
             (rxt-repeat from to atom))))
    ;; No quantifiers found
@@ -2317,7 +2317,7 @@ in character classes as outside them."
 ;; This idea is stolen straight out of the scsh implementation.
 
 (defun rxt-adt->pcre (re)
-  (cl-multiple-value-bind (s lev) (rxt-adt->pcre/lev re) s))
+  (cl-destructuring-bind (s lev) (rxt-adt->pcre/lev re) s))
 
 (defun rxt-adt->pcre/lev (re)
   (cond
@@ -2367,11 +2367,11 @@ in character classes as outside them."
       (rxt-seq-elts->pcre elts))))
 
 (defun rxt-seq-elts->pcre (elts)
-  (cl-multiple-value-bind
+  (cl-destructuring-bind
       (s lev) (rxt-adt->pcre/lev (car elts))
     (if (null (cdr elts))
 	(list s lev)
-      (cl-multiple-value-bind
+      (cl-destructuring-bind
 	  (s1 lev1) (rxt-seq-elts->pcre (cdr elts))
 	(list (concat (rxt-paren-if-necessary s lev)
                       (rxt-paren-if-necessary s1 lev1))
@@ -2389,16 +2389,16 @@ in character classes as outside them."
       (rxt-choice-elts->pcre elts))))
 
 (defun rxt-choice-elts->pcre (elts)
-  (cl-multiple-value-bind
+  (cl-destructuring-bind
       (s lev) (rxt-adt->pcre/lev (car elts))
     (if (null (cdr elts))
 	(list s lev)
-      (cl-multiple-value-bind
+      (cl-destructuring-bind
 	  (s1 lev1) (rxt-choice-elts->pcre (cdr elts))
 	(list (concat s "|" s1) 3)))))
 
 (defun rxt-submatch->pcre (re)
-  (cl-multiple-value-bind
+  (cl-destructuring-bind
       (s lev) (rxt-adt->pcre/lev (rxt-submatch-body re))
     (list (concat "(" s ")") 0)))
 
@@ -2407,7 +2407,7 @@ in character classes as outside them."
 	(to (rxt-repeat-to re))
 	(body (rxt-repeat-body re))
         (greedy (rxt-repeat-greedy re)))
-    (cl-multiple-value-bind
+    (cl-destructuring-bind
 	(s lev) (rxt-adt->pcre/lev body)
       (cond
        ((and to (= from 1) (= to 1)) (list s lev))
