@@ -824,7 +824,7 @@ the kill ring; see the two functions named above for details."
     (define-key map (kbd "C-c / e p") 'rxt-elisp-to-pcre)
     (define-key map (kbd "C-c / e x") 'rxt-elisp-to-rx)
     (define-key map (kbd "C-c / e s") 'rxt-elisp-to-sre)
-    (define-key map (kbd "C-c / e '") 'rxt-pcre-to-strings)
+    (define-key map (kbd "C-c / e '") 'rxt-elisp-to-strings)
     (define-key map (kbd "C-c / e t") 'rxt-toggle-elisp-rx)
     (define-key map (kbd "C-c / t") 'rxt-toggle-elisp-rx)
     (define-key map (kbd "C-c / h") 'rxt-fontify-regexp-at-point)
