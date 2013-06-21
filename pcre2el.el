@@ -1446,7 +1446,7 @@ value returned. The matched token is available within the BODY
 forms as (match-string 0).
 
 There can be a default case where REGEXP is `t', which evaluates
-the corresponding FORMS but does not move point.p
+the corresponding FORMS but does not move point.
 
 Returns `nil' if none of the CASES matches."
     (declare (debug (&rest (sexp &rest form))))
