@@ -18,7 +18,7 @@
      regexp, provided the list is finite
 
 ** Usage
-   Enable =rxt-minor-mode= or its global equivalent =rxt-global-mode=
+   Enable =rxt-mode= or its global equivalent =rxt-global-mode=
    to get the default key-bindings. There are three sets of commands:
    commands that take a PCRE regexp, commands which take an Emacs
    regexp, and commands that try to do the right thing based on the
