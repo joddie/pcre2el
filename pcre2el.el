@@ -6,7 +6,7 @@
 ;; Hacked additionally by:	opensource at hardakers dot net
 ;; Created:			14 Feb 2012
 ;; Updated:			15 June 2013
-;; Version:                     1.5
+;; Version:                     1.6
 ;; Url:                         https://github.com/joddie/pcre2el
 ;; Package-Requires:            ((cl-lib "0.3"))
 
@@ -597,20 +597,32 @@ these commands only."
      (call-interactively #',pcre-function)))
 
 
-;;;; Query-replace replacement
+;;;; Minor mode for using emulated PCRE syntax
+
+;;;###autoload
+(define-minor-mode pcre-mode
+    "Use emulated PCRE syntax wherever possible"
+  nil " PCRE"
+  (let ((map (make-sparse-keymap)))
+    (define-key map [remap query-replace-regexp] 'pcre-query-replace-regexp)
+    (define-key map [remap replace-regexp]       'pcre-replace-regexp)
+    map)
+  :global t)
+ 
+;;; The `interactive' specs of the following functions are lifted
+;;; wholesale from their built-in counterparts: see `replace.el.gz'.
+;;; TODO: Is it better to use advice instead?
 
 ;;;###autoload
 (defun pcre-query-replace-regexp (regexp to-string &optional delimited start end)
-  "Use a PCRE regexp to search and replace with.
-   This calls query-replace-regexp after converting the PCRE input to
-   an elisp version of the search regexp"
+  "Perform `query-replace-regexp' using emulated PCRE regexp syntax."
   (interactive
    ;; the following interactive code was taken from replace.el from emacs
    (let ((common
           (query-replace-read-args
            (concat "Query replace"
                    (if current-prefix-arg " word" "")
-                   " (pcre)regexp"
+                   " PCRE regexp"
                    (if (and transient-mark-mode mark-active) " in region" ""))
            t)))
      (list (nth 0 common) (nth 1 common) (nth 2 common)
@@ -621,7 +633,25 @@ these commands only."
                (region-beginning))
            (if (and transient-mark-mode mark-active)
                (region-end)))))
-  (query-replace-regexp (pcre-to-elisp regexp) to-string delimited start end))
+  (query-replace-regexp (rxt-pcre-to-elisp regexp) to-string delimited start end))
+
+;;;###autoload
+(defun pcre-replace-regexp (regexp to-string &optional delimited start end)
+  "Perform `replace-regexp' using emulated PCRE regexp syntax."
+  (interactive
+   (let ((common
+	  (query-replace-read-args
+	   (concat "Replace"
+		   (if current-prefix-arg " word" "")
+		   " PCRE regexp"
+		   (if (and transient-mark-mode mark-active) " in region" ""))
+	   t)))
+     (list (nth 0 common) (nth 1 common) (nth 2 common)
+	   (if (and transient-mark-mode mark-active)
+	       (region-beginning))
+	   (if (and transient-mark-mode mark-active)
+	       (region-end)))))
+  (replace-regexp (rxt-pcre-to-elisp regexp) to-string delimited start end))
 
 
 ;;; Commands that translate Elisp to other formats
