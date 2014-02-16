@@ -1,12 +1,12 @@
 ;;; pcre2el.el --- parse, convert, and font-lock PCRE, Emacs and rx regexps
 
-;; Copyright (C) 2012-2013 Jon Oddie <jonxfield@gmail.com>
+;; Copyright (C) 2012-2014 Jon Oddie <jonxfield@gmail.com>
 
 ;; Author:			joddie <jonxfield at gmail.com>
 ;; Hacked additionally by:	opensource at hardakers dot net
 ;; Created:			14 Feb 2012
-;; Updated:			15 June 2013
-;; Version:                     1.6
+;; Updated:			16 Feb 2014
+;; Version:                     1.7
 ;; Url:                         https://github.com/joddie/pcre2el
 ;; Package-Requires:            ((cl-lib "0.3"))
 
@@ -456,6 +456,7 @@
 (require 'cl-lib)
 (require 'rx)
 (require 're-builder)
+(require 'advice)
 
 ;;; Customization group
 (defgroup rxt nil
@@ -603,55 +604,64 @@ these commands only."
 (define-minor-mode pcre-mode
     "Use emulated PCRE syntax wherever possible"
   nil " PCRE"
-  (let ((map (make-sparse-keymap)))
-    (define-key map [remap query-replace-regexp] 'pcre-query-replace-regexp)
-    (define-key map [remap replace-regexp]       'pcre-replace-regexp)
-    map)
-  :global t)
+  nil
+  :global t
+  ;; Enable or disable advice
+  (if pcre-mode
+      (ad-enable-regexp "pcre-mode")
+    (ad-disable-regexp "pcre-mode"))
+    ;; "Activating" advice re-computes the function definitions, which
+  ;; is necessary whether enabling or disabling
+  (ad-activate-regexp "pcre-mode"))
  
 ;;; The `interactive' specs of the following functions are lifted
-;;; wholesale from their built-in counterparts: see `replace.el.gz'.
-;;; TODO: Is it better to use advice instead?
+;;; wholesale from the original built-ins, which see.
+(defadvice read-regexp
+    (around pcre-mode first (prompt &optional defaults history) disable)
+  "Read regexp using PCRE syntax and return its Elisp equivalent."
+  (ad-set-arg 0 (concat "[PCRE] " prompt))
+  ad-do-it
+  (setq ad-return-value
+        (rxt-pcre-to-elisp ad-return-value)))
 
-;;;###autoload
-(defun pcre-query-replace-regexp (regexp to-string &optional delimited start end)
-  "Perform `query-replace-regexp' using emulated PCRE regexp syntax."
+(defadvice align-regexp
+    (before pcre-mode first (beg end regexp &optional group spacing repeat) disable)
+  "Perform `align-regexp' using emulated PCRE regexp syntax."
   (interactive
-   ;; the following interactive code was taken from replace.el from emacs
-   (let ((common
-          (query-replace-read-args
-           (concat "Query replace"
-                   (if current-prefix-arg " word" "")
-                   " PCRE regexp"
-                   (if (and transient-mark-mode mark-active) " in region" ""))
-           t)))
-     (list (nth 0 common) (nth 1 common) (nth 2 common)
-           ;; These are done separately here
-           ;; so that command-history will record these expressions
-           ;; rather than the values they had this time.
-           (if (and transient-mark-mode mark-active)
-               (region-beginning))
-           (if (and transient-mark-mode mark-active)
-               (region-end)))))
-  (query-replace-regexp (rxt-pcre-to-elisp regexp) to-string delimited start end))
+   (append
+    (list (region-beginning) (region-end))
+    (if current-prefix-arg
+	(list (rxt-pcre-to-elisp
+               (read-string "Complex align using PCRE regexp: "
+                            "(\\s*)"))
+	      (string-to-number
+	       (read-string
+		"Parenthesis group to modify (justify if negative): " "1"))
+	      (string-to-number
+	       (read-string "Amount of spacing (or column if negative): "
+			    (number-to-string align-default-spacing)))
+	      (y-or-n-p "Repeat throughout line? "))
+      (list (concat "\\(\\s-*\\)"
+		    (rxt-pcre-to-elisp
+                     (read-string "Align regexp: ")))
+	    1 align-default-spacing nil)))))
 
-;;;###autoload
-(defun pcre-replace-regexp (regexp to-string &optional delimited start end)
-  "Perform `replace-regexp' using emulated PCRE regexp syntax."
+(defadvice find-tag-regexp
+    (before pcre-mode first (regexp &optional next-p other-window) disable)
+  "Perform `find-tag-regexp' using emulated PCRE regexp syntax."
   (interactive
-   (let ((common
-	  (query-replace-read-args
-	   (concat "Replace"
-		   (if current-prefix-arg " word" "")
-		   " PCRE regexp"
-		   (if (and transient-mark-mode mark-active) " in region" ""))
-	   t)))
-     (list (nth 0 common) (nth 1 common) (nth 2 common)
-	   (if (and transient-mark-mode mark-active)
-	       (region-beginning))
-	   (if (and transient-mark-mode mark-active)
-	       (region-end)))))
-  (replace-regexp (rxt-pcre-to-elisp regexp) to-string delimited start end))
+   (let ((args (find-tag-interactive "[PCRE] Find tag regexp: " t)))
+     (list (rxt-pcre-to-elisp (nth 0 args))
+           (nth 1 args) (nth 2 args)))))
+
+(defadvice sort-regexp-fields
+    (before pcre-mode first (reverse record-regexp key-regexp beg end) disable)
+  "Perform `sort-regexp-fields' using emulated PCRE regexp syntax."
+  (interactive "P\nsPCRE regexp specifying records to sort: \n\
+sPCRE regexp specifying key within record: \nr")
+  (ad-set-arg 1 (rxt-pcre-to-elisp (ad-get-arg 1)))
+  (ad-set-arg 2 (rxt-pcre-to-elisp (ad-get-arg 2))))
+
 
 
 ;;; Commands that translate Elisp to other formats
