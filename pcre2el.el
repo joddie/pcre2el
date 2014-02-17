@@ -644,7 +644,7 @@ emulated PCRE regexps when `isearch-regexp' is true."
       (let ((regexp (rxt-pcre-to-elisp string)))
         (if isearch-forward
             (re-search-forward regexp bound noerror)
-          (re-search-backward bound noerror))))))
+          (re-search-backward regexp bound noerror))))))
 
 (defadvice isearch-message-prefix (after pcre-mode disable)
   (when isearch-regexp
