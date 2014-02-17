@@ -648,8 +648,16 @@ emulated PCRE regexps when `isearch-regexp' is true."
 
 (defadvice isearch-message-prefix (after pcre-mode disable)
   (when isearch-regexp
-    (setq ad-return-value
-          (replace-regexp-in-string "regexp" "PCRE regexp" ad-return-value t t))))
+    (let ((message ad-return-value))
+      ;; Some hackery to give replacement the same fontification as
+      ;; the original
+      (when
+          (let ((case-fold-search t)) (string-match "regexp" message))
+        (let* ((match (match-string 0 message))
+               (properties (text-properties-at 0 match))
+               (replacement (apply #'propertize "PCRE regexp" properties))
+               (new-message (replace-match replacement t t message)))
+          (setq ad-return-value new-message))))))
 
 (defadvice isearch-fallback
     (before pcre-mode (want-backslash &optional allow-invalid to-barrier) disable)
