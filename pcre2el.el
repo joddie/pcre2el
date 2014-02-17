@@ -1096,6 +1096,16 @@ the kill ring; see the two functions named above for details."
           (overlay-put overlay 'face 'rxt-highlight-face))))))
 
 
+;;;; Error handling
+
+(put 'rxt-invalid-regexp
+     'error-conditions
+     '(error invalid-regexp rxt-invalid-regexp))
+
+(defun rxt-error (&rest format-args)
+  (signal 'rxt-invalid-regexp (list (apply #'format format-args))))
+
+
 ;;;; Regexp syntax tree data type
 
 ;; Base class that keeps the source text as a string with offsets
@@ -1304,7 +1314,7 @@ the kill ring; see the two functions named above for details."
 (defun rxt-syntax-class (symbol)
   (if (assoc symbol rx-syntax)
       (make-rxt-syntax-class :symbol symbol)
-    (error "Invalid syntax class symbol %s" symbol)))
+    (rxt-error "Invalid syntax class symbol %s" symbol)))
 
 ;;; Character categories (Emacs only)
 (cl-defstruct (rxt-char-category
@@ -1314,7 +1324,7 @@ the kill ring; see the two functions named above for details."
 (defun rxt-char-category (symbol)
   (if (assoc symbol rx-categories)
       (make-rxt-char-category :symbol symbol)
-    (error "Invalid character category symbol %s" symbol)))
+    (rxt-error "Invalid character category symbol %s" symbol)))
 
 
 ;;; Char sets
@@ -1374,7 +1384,7 @@ unchanged."
     (make-rxt-char-set-union :classes (list item)))
 
    (t
-    (error "Can't construct character set union from %S" item))))
+    (rxt-error "Can't construct character set union from %S" item))))
 
 ;;; Generalized union constructor: falls back to rxt-choice if
 ;;; necessary
@@ -1426,7 +1436,7 @@ modified."
         (rxt-char-set-adjoin! cset thing))))
 
    (t
-    (error "Can't adjoin non-rxt-char-set, character, range or symbol %S" item)))
+    (rxt-error "Can't adjoin non-rxt-char-set, character, range or symbol %S" item)))
   cset)
 
 
@@ -1460,7 +1470,7 @@ or a shorthand char-set specifier (see `rxt-char-set')`."
 	 (rxt-char-set-negation-elt cset))
 
 	(t
-	 (error "Can't negate non-char-set or syntax class %s" cset))))
+         (rxt-error "Can't negate non-char-set or syntax class %s" cset))))
 
 ;;; Intersections of char sets
 
@@ -1488,7 +1498,8 @@ or a shorthand char-set specifier (see `rxt-char-set')`."
 	(push cset elts))
 
        (t
-	(error "Can't take intersection of non-character-set %s" cset))))
+	(rxt-error "Can't take intersection of non-character-set %s" cset))))
+
     (if (null elts)
 	(rxt-negate cmpl)
       (unless (rxt-empty-char-set-p cmpl)
@@ -1828,7 +1839,7 @@ otherwise it would not match.")
 ;; parenthesized groups, assertions, etc.
 (defun rxt-parse-atom (&optional branch-begin)
   (if (eobp)
-      (error "Unexpected end of regular expression")
+      (rxt-error "Unexpected end of regular expression")
     (if rxt-parse-pcre
         (rxt-parse-atom/pcre)
       (rxt-parse-atom/el branch-begin))))
@@ -1888,7 +1899,7 @@ otherwise it would not match.")
                       (car (rassoc (string-to-char (match-string 2))
                                    rx-categories))))
                  (unless category
-                   (error "Unrecognized character category %s" (match-string 2)))
+                   (rxt-error "Unrecognized character category %s" (match-string 2)))
                  (let ((re (rxt-char-category category)))
                    (if negated (rxt-negate re) re)))))
         ;; Backreference
@@ -2056,16 +2067,16 @@ in character classes as outside them."
                     rxt-pcre-s-mode s)
               (cl-return rxt-empty-string))
              (t
-              (error "Unrecognized PCRE extended construction (?%s...)"
-                     (buffer-substring-no-properties begin (point)))))))
-         (t (error "Unrecognized PCRE extended construction ?%c"
-                   (char-after)))))
+              (rxt-error "Unrecognized PCRE extended construction (?%s...)"
+                         (buffer-substring-no-properties begin (point)))))))
+         (t (rxt-error "Unrecognized PCRE extended construction ?%c"
+                       (char-after)))))
        ;; No special "(* ...)" verbs are recognised
        ((rx "*")
         (let ((begin (point)))
           (search-forward ")")
-          (error "Unrecognized PCRE extended construction (*%s"
-                 (buffer-substring begin (point))))))
+          (rxt-error "Unrecognized PCRE extended construction (*%s"
+                     (buffer-substring begin (point))))))
       ;; Parse the remainder of the subgroup
       (unless shy (cl-incf rxt-subgroup-count))
       (let* ((rxt-pcre-extended-mode x)
@@ -2075,7 +2086,7 @@ in character classes as outside them."
         (rxt-fontify-token-case
          (")" (cons 'font-lock-builtin-face
                     (if shy rx (rxt-submatch rx))))
-         (t (error "Subexpression missing close paren")))))))
+         (t (rxt-error "Subexpression missing close paren")))))))
 
 (defun rxt-parse-subgroup/el ()
   (let ((shy
@@ -2087,7 +2098,7 @@ in character classes as outside them."
        ((rx "\\)")
         (cons 'font-lock-builtin-face
               (if shy rx (rxt-submatch rx))))
-       (t (error "Subexpression missing close paren"))))))
+       (t (rxt-error "Subexpression missing close paren"))))))
 
 (defun rxt-parse-braces ()
   (rxt-fontify-token-case
@@ -2105,13 +2116,13 @@ in character classes as outside them."
    (t
     (let ((begin (point)))
       (search-forward "}" nil 'go-to-end)
-      (error "Bad brace expression {%s"
-             (buffer-substring-no-properties begin (point)))))))
+      (rxt-error "Bad brace expression {%s"
+                 (buffer-substring-no-properties begin (point)))))))
 
 ;; Parse a character set range [...]
 (defun rxt-parse-char-class ()
   (when (eobp)
-    (error "Missing close right bracket in regexp"))
+    (rxt-error "Missing close right bracket in regexp"))
 
   (rxt-syntax-tree-value
    (let* ((negated (rxt-fontify-token-case
@@ -2127,7 +2138,7 @@ in character classes as outside them."
      (catch 'done
        (while t
          (when (eobp)
-           (error "Missing close right bracket in regexp"))
+           (rxt-error "Missing close right bracket in regexp"))
 
          (if (and (looking-at "\\]")
                   (not (= (point) begin)))
@@ -2178,11 +2189,11 @@ in character classes as outside them."
            (intern (match-string 1))))
     ;; Error on unknown posix-class-like syntax
     ((rx "[:" (* (any "a-z")) ":]")
-     (error "Unknown posix class %s" (match-string 0)))
+     (rxt-error "Unknown posix class %s" (match-string 0)))
     ;; Error on [= ... ]= collation syntax
     ((rx "[" (submatch (any "." "="))
          (* (any "a-z")) (backref 1) "]")
-     (error "%s collation syntax not supported" (match-string 0)))
+     (rxt-error "%s collation syntax not supported" (match-string 0)))
     ;; Other characters stand for themselves
     ((rx (or "\n" nonl))
      (cons font-lock-string-face (string-to-char (match-string 0)))))))
@@ -2282,7 +2293,7 @@ in character classes as outside them."
            (let ((n (rxt-backref-n re)))
              (if (<= n 9)
                  (list 'backref (rxt-backref-n re))
-               (error "Too many backreferences (%s)" n))))
+               (rxt-error "Too many backreferences (%s)" n))))
 
           ((rxt-syntax-class-p re)
            (list 'syntax (rxt-syntax-class-symbol re)))
@@ -2349,7 +2360,7 @@ in character classes as outside them."
            (list 'not (rxt-adt->rx (rxt-char-set-negation-elt re))))
 
           (t
-           (error "No RX translation for %s" re)))))
+           (rxt-error "No RX translation for %s" re)))))
 
     ;; Store source information on each fragment of the generated RX
     ;; sexp for rxt-explain mode
@@ -2387,7 +2398,7 @@ in character classes as outside them."
           (greedy (rxt-repeat-greedy re))
 	  (body (rxt-adt->sre (rxt-repeat-body re))))
       (when (not greedy)
-        (error "No SRE translation of non-greedy repetition %s" re))
+        (rxt-error "No SRE translation of non-greedy repetition %s" re))
       (cond
        ((and (zerop from) (null to)) (list '* body))
        ((and (equal from 1) (null to)) (list '+ body))
@@ -2425,7 +2436,7 @@ in character classes as outside them."
     (cons '& (mapcar #'rxt-adt->sre (rxt-char-set-intersection-elts re))))
 
    (t
-    (error "No SRE translation for %s" re))))
+    (rxt-error "No SRE translation for %s" re))))
 
 
 ;;;; 'Unparser' to PCRE notation
@@ -2459,7 +2470,7 @@ in character classes as outside them."
     (let ((s (rxt-primitive-pcre re)))
       (if s
 	  (list s 1)
-	(error "No PCRE translation for %s" re))))
+	(rxt-error "No PCRE translation for %s" re))))
 
    ((rxt-string-p re) (rxt-string->pcre re))
    ((rxt-seq-p re) (rxt-seq->pcre re))
@@ -2479,7 +2490,7 @@ in character classes as outside them."
    ;; ((rxt-char-set-intersection re) (rxt-char-set-intersection->pcre re))
 
    (t
-    (error "No PCRE translation for %s" re))))
+    (rxt-error "No PCRE translation for %s" re))))
 
 (defconst rxt-pcre-metachars (rx (any "\\^.$|()[]*+?{}")))
 (defconst rxt-pcre-charset-metachars (rx (any "]" "[" "\\" "^" "-")))
@@ -2575,10 +2586,10 @@ in character classes as outside them."
 	   (if (rxt-char-set-union-p elt)
 	       (list
 		(concat "[^" (rxt-char-set->pcre/chars elt) "]") 1)
-	     (error "No PCRE translation of %s" elt))))
+	     (rxt-error "No PCRE translation of %s" elt))))
 
 	(t
-	 (error "Non-char-set in rxt-char-set->pcre: %s" re))))
+	 (rxt-error "Non-char-set in rxt-char-set->pcre: %s" re))))
 
 ;; Fortunately, easier in PCRE than in POSIX!
 (defun rxt-char-set->pcre/chars (re)
