@@ -656,7 +656,7 @@ emulated PCRE regexps when `isearch-regexp' is true."
 ;;; wholesale from the original built-ins, which see.
 (defadvice read-regexp
     (around pcre-mode first (prompt &optional defaults history) disable)
-  "Read regexp using PCRE syntax and return its Elisp equivalent."
+  "Read regexp using PCRE syntax and convert to Elisp equivalent."
   (ad-set-arg 0 (concat "[PCRE] " prompt))
   ad-do-it
   (setq ad-return-value
@@ -664,7 +664,7 @@ emulated PCRE regexps when `isearch-regexp' is true."
 
 (defadvice align-regexp
     (before pcre-mode first (beg end regexp &optional group spacing repeat) disable)
-  "Perform `align-regexp' using emulated PCRE regexp syntax."
+  "Read regexp using PCRE syntax and convert to Elisp equivalent."
   (interactive
    (append
     (list (region-beginning) (region-end))
@@ -686,6 +686,7 @@ emulated PCRE regexps when `isearch-regexp' is true."
 
 (defadvice find-tag-regexp
     (before pcre-mode first (regexp &optional next-p other-window) disable)
+  "Read regexp using PCRE syntax and convert to Elisp equivalent."
   "Perform `find-tag-regexp' using emulated PCRE regexp syntax."
   (interactive
    (let ((args (find-tag-interactive "[PCRE] Find tag regexp: " t)))
@@ -694,7 +695,7 @@ emulated PCRE regexps when `isearch-regexp' is true."
 
 (defadvice sort-regexp-fields
     (before pcre-mode first (reverse record-regexp key-regexp beg end) disable)
-  "Perform `sort-regexp-fields' using emulated PCRE regexp syntax."
+  "Read regexp using PCRE syntax and convert to Elisp equivalent."
   (interactive "P\nsPCRE regexp specifying records to sort: \n\
 sPCRE regexp specifying key within record: \nr")
   (ad-set-arg 1 (rxt-pcre-to-elisp (ad-get-arg 1)))
@@ -1114,7 +1115,7 @@ the kill ring; see the two functions named above for details."
     rxt-syntax-tree
   begin end source)
 
-(defun rxt-syntax-tree-readable (tree)  
+(defun rxt-syntax-tree-readable (tree)
   (cl-assert (rxt-syntax-tree-p tree))
   (let ((begin (rxt-syntax-tree-begin tree))
         (end (rxt-syntax-tree-end tree))
@@ -1122,7 +1123,7 @@ the kill ring; see the two functions named above for details."
     (if (and begin end source)
         (substring source begin end)
       (let ((print-level 1))
-        (prin1-to-string tree))))) 
+        (prin1-to-string tree)))))
 
 
 ;; Literal string
