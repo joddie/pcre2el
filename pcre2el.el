@@ -651,6 +651,18 @@ emulated PCRE regexps when `isearch-regexp' is true."
     (setq ad-return-value
           (replace-regexp-in-string "regexp" "PCRE regexp" ad-return-value t t))))
 
+(defadvice isearch-fallback
+    (before pcre-mode (want-backslash &optional allow-invalid to-barrier) disable)
+  ;; A dirty hack to the internals of isearch.  Falling back to a
+  ;; previous match position is necessary when the (Emacs) regexp ends
+  ;; in "*", "?", "\{" or "\|": this is handled in
+  ;; `isearch-process-search-char' by calling `isearch-fallback' with
+  ;; `t' for the value of the first parameter, `want-backslash', in
+  ;; the last two cases.  With PCRE regexps, falling back should take
+  ;; place on "*", "?", "{" or "|", with no backslashes required.
+  ;; This advice handles the last two cases by unconditionally setting
+  ;; `want-backslash' to nil.
+  (ad-set-arg 0 nil))
 
 ;;; The `interactive' specs of the following functions are lifted
 ;;; wholesale from the original built-ins, which see.
