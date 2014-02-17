@@ -602,18 +602,56 @@ these commands only."
 
 ;;;###autoload
 (define-minor-mode pcre-mode
-    "Use emulated PCRE syntax wherever possible"
+    "Use emulated PCRE syntax for regexps wherever possible.
+
+Advises the `interactive' specs of `read-regexp' and the
+following other functions so that they read PCRE syntax and
+translate to its Emacs equivalent:
+
+- `read-regexp'
+- `align-regexp'
+- `find-tag-regexp'
+- `sort-regexp-fields'
+- `isearch-message-prefix'
+
+Also alters the behavior of `isearch-mode' when searching by regexp."
   nil " PCRE"
   nil
   :global t
-  ;; Enable or disable advice
+  ;; Enable or disable advice, and set up hack to isearch-mode
   (if pcre-mode
-      (ad-enable-regexp "pcre-mode")
-    (ad-disable-regexp "pcre-mode"))
-    ;; "Activating" advice re-computes the function definitions, which
+      (progn
+        ;; TODO: Better to use `isearch-mode-hook' for this?
+        (setq isearch-search-fun-function #'pcre-isearch-search-fun-function)
+        (ad-enable-regexp "pcre-mode"))
+    (ad-disable-regexp "pcre-mode")
+    (setq isearch-search-fun-function nil))
+  ;; "Activating" advice re-computes the function definitions, which
   ;; is necessary whether enabling or disabling
   (ad-activate-regexp "pcre-mode"))
  
+(defun pcre-isearch-search-fun-function ()
+  "Enables isearching using emulated PCRE syntax.
+
+This is set as the value of `isearch-search-fun-function' when
+`pcre-mode' is enabled.  Returns a function which searches using
+emulated PCRE regexps when `isearch-regexp' is true."
+  (if (not isearch-regexp)
+      (isearch-search-fun-default)
+    (lambda (string bound noerror)
+      ;; TODO: Should cache/memoize this value to avoid doing
+      ;; unnecessary work
+      (let ((regexp (rxt-pcre-to-elisp string)))
+        (if isearch-forward
+            (re-search-forward regexp bound noerror)
+          (re-search-backward bound noerror))))))
+
+(defadvice isearch-message-prefix (after pcre-mode disable)
+  (when isearch-regexp
+    (setq ad-return-value
+          (replace-regexp-in-string "regexp" "PCRE regexp" ad-return-value t t))))
+
+
 ;;; The `interactive' specs of the following functions are lifted
 ;;; wholesale from the original built-ins, which see.
 (defadvice read-regexp
