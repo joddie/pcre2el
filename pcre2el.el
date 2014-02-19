@@ -608,7 +608,6 @@ Advises the `interactive' specs of `read-regexp' and the
 following other functions so that they read PCRE syntax and
 translate to its Emacs equivalent:
 
-- `read-regexp'
 - `align-regexp'
 - `find-tag-regexp'
 - `sort-regexp-fields'
@@ -756,7 +755,7 @@ Consider using `pcre-mode' instead of this function."
 	      (y-or-n-p "Repeat throughout line? "))
       (list (concat "\\(\\s-*\\)"
 		    (rxt-pcre-to-elisp
-                     (read-string "Align regexp: ")))
+                     (read-string "Align PCRE regexp: ")))
 	    1 align-default-spacing nil)))))
 
 (defadvice find-tag-regexp
