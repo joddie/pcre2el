@@ -715,6 +715,18 @@ emulated PCRE regexps when `isearch-regexp' is true."
   ;; `want-backslash' to nil.
   (ad-set-arg 0 nil))
 
+(defun pcre-query-replace-regexp ()
+  "Perform `query-replace-regexp' using PCRE syntax.
+
+Consider using `pcre-mode' instead of this function."
+  (interactive)
+  (let ((old-pcre-mode pcre-mode))
+    (unwind-protect
+         (progn
+           (pcre-mode +1)
+           (call-interactively #'query-replace-regexp))
+      (pcre-mode (if old-pcre-mode 1 0)))))
+
 ;;; The `interactive' specs of the following functions are lifted
 ;;; wholesale from the original built-ins, which see.
 (defadvice read-regexp
