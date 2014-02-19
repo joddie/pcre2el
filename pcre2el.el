@@ -618,18 +618,48 @@ Also alters the behavior of `isearch-mode' when searching by regexp."
   nil " PCRE"
   nil
   :global t
-  ;; Enable or disable advice, and set up hack to isearch-mode
+
   (if pcre-mode
+      ;; Enabling
       (progn
-        ;; TODO: Better to use `isearch-mode-hook' for this?
-        (setq isearch-search-fun-function #'pcre-isearch-search-fun-function)
-        (ad-enable-regexp "pcre-mode"))
+        ;; Enable advice
+        (ad-enable-regexp "pcre-mode")
+        ;; Set up isearch hooks
+        (add-hook 'isearch-mode-hook #'pcre-isearch-mode-hook)
+        (add-hook 'isearch-mode-end-hook #'pcre-isearch-mode-end-hook))
+
+    ;; Disable advice
     (ad-disable-regexp "pcre-mode")
-    (setq isearch-search-fun-function nil))
+    ;; Remove from isearch hooks
+    (remove-hook 'isearch-mode-hook #'pcre-isearch-mode-hook)
+    (remove-hook 'isearch-mode-end-hook #'pcre-isearch-mode-end-hook))
+
   ;; "Activating" advice re-computes the function definitions, which
   ;; is necessary whether enabling or disabling
   (ad-activate-regexp "pcre-mode"))
  
+(defvar pcre-old-isearch-search-fun-function nil
+  "Saved value of `isearch-search-fun-function' to restore on exiting `pcre-mode.'")
+(make-variable-buffer-local 'pcre-old-isearch-search-fun-function)
+
+(defvar pcre-isearch-cache nil
+  "Cache of PCRE-to-Emacs translations used in `pcre-mode' Isearch.
+
+Keys are PCRE regexps, values are their Emacs equivalents.")
+
+(defun pcre-isearch-mode-hook ()
+  (when (not (eq isearch-search-fun-function #'isearch-search-fun-default))
+    (message "Warning: pcre-mode overriding existing isearch function `%s'"
+             isearch-search-fun-function))
+  (setq pcre-old-isearch-search-fun-function isearch-search-fun-function)
+  (set (make-local-variable 'isearch-search-fun-function)
+       #'pcre-isearch-search-fun-function)
+  ;; Clear the cache each time isearch-mode is entered 
+  (setq pcre-isearch-cache (make-hash-table)))
+
+(defun pcre-isearch-mode-end-hook ()
+  (setq isearch-search-fun-function pcre-old-isearch-search-fun-function))
+
 (defun pcre-isearch-search-fun-function ()
   "Enables isearching using emulated PCRE syntax.
 
@@ -639,15 +669,28 @@ emulated PCRE regexps when `isearch-regexp' is true."
   (if (not isearch-regexp)
       (isearch-search-fun-default)
     (lambda (string bound noerror)
-      ;; TODO: Should cache/memoize this value to avoid doing
-      ;; unnecessary work
-      (let ((regexp (rxt-pcre-to-elisp string)))
+      ;; Raise an error if the regexp ends in an incomplete escape
+      ;; sequence (= odd number of backslashes).
+      ;; TODO: Perhaps this should really be handled in rxt-pcre-to-elisp?
+      (if (isearch-backslash string) (rxt-error "Trailing backslash"))
+      (let ((regexp (pcre-isearch-pcre-to-elisp string)))
         (if isearch-forward
             (re-search-forward regexp bound noerror)
           (re-search-backward regexp bound noerror))))))
 
+(defun pcre-isearch-pcre-to-elisp (pcre)
+  ;; Translate PCRE to Emacs syntax, caching results to avoid
+  ;; re-computing on each forward search
+  (or (gethash pcre pcre-isearch-cache)
+      (let ((elisp (rxt-pcre-to-elisp pcre)))
+        (puthash pcre elisp pcre-isearch-cache)
+        elisp)))
+
 (defadvice isearch-message-prefix (after pcre-mode disable)
-  (when isearch-regexp
+  (when (and isearch-regexp
+             ;; Prevent an inaccurate message if our callback was
+             ;; removed somehow
+             (eq isearch-search-fun-function #'pcre-isearch-search-fun-function))
     (let ((message ad-return-value))
       ;; Some hackery to give replacement the same fontification as
       ;; the original
