@@ -717,6 +717,7 @@ emulated PCRE regexps when `isearch-regexp' is true."
           (re-search-backward regexp bound noerror))))))
 
 (defadvice isearch-message-prefix (after pcre-mode disable)
+  "Add \"PCRE\" to the Isearch message when searching by regexp in `pcre-mode'."
   (when (and isearch-regexp
              ;; Prevent an inaccurate message if our callback was
              ;; removed somehow
@@ -734,6 +735,7 @@ emulated PCRE regexps when `isearch-regexp' is true."
 
 (defadvice isearch-fallback
     (before pcre-mode (want-backslash &optional allow-invalid to-barrier) disable)
+  "Hack to fall back correctly in `pcre-mode'. "
   ;; A dirty hack to the internals of isearch.  Falling back to a
   ;; previous match position is necessary when the (Emacs) regexp ends
   ;; in "*", "?", "\{" or "\|": this is handled in
@@ -745,6 +747,7 @@ emulated PCRE regexps when `isearch-regexp' is true."
   ;; `want-backslash' to nil.
   (ad-set-arg 0 nil))
 
+;;; Other hooks and defadvices
 (defun pcre-query-replace-regexp ()
   "Perform `query-replace-regexp' using PCRE syntax.
 
