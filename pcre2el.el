@@ -641,26 +641,65 @@ Also alters the behavior of `isearch-mode' when searching by regexp."
   "Saved value of `isearch-search-fun-function' to restore on exiting `pcre-mode.'")
 (make-variable-buffer-local 'pcre-old-isearch-search-fun-function)
 
-(defvar pcre-isearch-cache nil
-  "Cache of PCRE-to-Emacs translations used in `pcre-mode' Isearch.
+;;; Cache of PCRE -> Elisp translations
+(defvar pcre-mode-cache-size 100
+  "Number of PCRE-to-Emacs translations to keep in the `pcre-mode' cache.")
+
+(defvar pcre-mode-cache (make-hash-table :test 'equal)
+  "Cache of PCRE-to-Emacs translations used in `pcre-mode'.
 
 Keys are PCRE regexps, values are their Emacs equivalents.")
 
+(defvar pcre-mode-reverse-cache (make-hash-table :test 'equal)
+  "Cache of original PCREs translated to Emacs syntax in `pcre-mode'.
+
+Keys are translated Emacs regexps, values are their original PCRE
+form.  This is used to display the original PCRE regexp in place
+of its translated form.")
+
+(defvar pcre-cache-ring (make-ring pcre-mode-cache-size)
+  "Ring of PCRE-to-Emacs translations used in `pcre-mode'.
+
+When the ring fills up, the oldest element is removed and the
+corresponding entries are deleted from the hash tables
+`pcre-mode-cache' and `pcre-mode-reverse-cache'.")
+
+(defun pcre-to-elisp/cached (pcre)
+  "Translate PCRE to Emacs syntax, caching both forms."
+  (or (gethash pcre pcre-mode-cache)
+      (let ((elisp (rxt-pcre-to-elisp pcre)))
+        (pcre-set-cache pcre elisp)
+        elisp)))
+
+(defun pcre-set-cache (pcre-regexp emacs-regexp)
+  "Add a PCRE-to-Emacs translation to the `pcre-mode' cache."
+  (when (and (not (zerop (length pcre-regexp)))
+             (not (zerop (length emacs-regexp)))
+             (not (gethash pcre-regexp pcre-mode-cache)))
+    (if (= (ring-length pcre-cache-ring) (ring-size pcre-cache-ring))
+        (let* ((old-item (ring-remove pcre-cache-ring))
+               (old-pcre (car old-item))
+               (old-emacs (cdr old-item)))
+          (remhash old-pcre pcre-mode-cache)
+          (remhash old-emacs pcre-mode-reverse-cache))
+      (puthash pcre-regexp emacs-regexp pcre-mode-cache)
+      (puthash emacs-regexp pcre-regexp pcre-mode-reverse-cache)
+      (ring-insert pcre-cache-ring (cons pcre-regexp emacs-regexp)))))
+
+;;; Isearch advice
 (defun pcre-isearch-mode-hook ()
   (when (not (eq isearch-search-fun-function #'isearch-search-fun-default))
     (message "Warning: pcre-mode overriding existing isearch function `%s'"
              isearch-search-fun-function))
   (setq pcre-old-isearch-search-fun-function isearch-search-fun-function)
   (set (make-local-variable 'isearch-search-fun-function)
-       #'pcre-isearch-search-fun-function)
-  ;; Clear the cache each time isearch-mode is entered 
-  (setq pcre-isearch-cache (make-hash-table)))
+       #'pcre-isearch-search-fun-function))
 
 (defun pcre-isearch-mode-end-hook ()
   (setq isearch-search-fun-function pcre-old-isearch-search-fun-function))
 
 (defun pcre-isearch-search-fun-function ()
-  "Enables isearching using emulated PCRE syntax.
+  "Enable isearching using emulated PCRE syntax.
 
 This is set as the value of `isearch-search-fun-function' when
 `pcre-mode' is enabled.  Returns a function which searches using
@@ -672,18 +711,10 @@ emulated PCRE regexps when `isearch-regexp' is true."
       ;; sequence (= odd number of backslashes).
       ;; TODO: Perhaps this should really be handled in rxt-pcre-to-elisp?
       (if (isearch-backslash string) (rxt-error "Trailing backslash"))
-      (let ((regexp (pcre-isearch-pcre-to-elisp string)))
+      (let ((regexp (pcre-to-elisp/cached string)))
         (if isearch-forward
             (re-search-forward regexp bound noerror)
           (re-search-backward regexp bound noerror))))))
-
-(defun pcre-isearch-pcre-to-elisp (pcre)
-  ;; Translate PCRE to Emacs syntax, caching results to avoid
-  ;; re-computing on each forward search
-  (or (gethash pcre pcre-isearch-cache)
-      (let ((elisp (rxt-pcre-to-elisp pcre)))
-        (puthash pcre elisp pcre-isearch-cache)
-        elisp)))
 
 (defadvice isearch-message-prefix (after pcre-mode disable)
   (when (and isearch-regexp
@@ -726,6 +757,22 @@ Consider using `pcre-mode' instead of this function."
            (call-interactively #'query-replace-regexp))
       (pcre-mode (if old-pcre-mode 1 0)))))
 
+
+(defadvice add-to-history
+    (before pcre-mode (history-var newelt &optional maxelt keep-all) disable)
+  "Add the original PCRE to query-replace history in `pcre-mode'."
+  (when (eq history-var query-replace-from-history-variable)
+    (let ((original (gethash newelt pcre-mode-reverse-cache)))
+      (when original
+        (ad-set-arg 1 original)))))
+
+(defadvice query-replace-descr
+    (before pcre-mode (from) disable)
+  "Use the original PCRE in Isearch prompts in `pcre-mode'."
+  (let ((original (gethash from pcre-mode-reverse-cache)))
+    (when original
+      (ad-set-arg 0 original))))
+
 ;;; The `interactive' specs of the following functions are lifted
 ;;; wholesale from the original built-ins, which see.
 (defadvice read-regexp
@@ -734,7 +781,7 @@ Consider using `pcre-mode' instead of this function."
   (ad-set-arg 0 (concat "[PCRE] " prompt))
   ad-do-it
   (setq ad-return-value
-        (rxt-pcre-to-elisp ad-return-value)))
+        (pcre-to-elisp/cached ad-return-value)))
 
 (defadvice align-regexp
     (before pcre-mode first (beg end regexp &optional group spacing repeat) disable)
