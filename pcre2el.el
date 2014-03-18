@@ -1,12 +1,12 @@
 ;;; pcre2el.el --- parse, convert, and font-lock PCRE, Emacs and rx regexps
 
-;; Copyright (C) 2012-2013 Jon Oddie <jonxfield@gmail.com>
+;; Copyright (C) 2012-2014 Jon Oddie <jonxfield@gmail.com>
 
 ;; Author:			joddie <jonxfield at gmail.com>
 ;; Hacked additionally by:	opensource at hardakers dot net
 ;; Created:			14 Feb 2012
-;; Updated:			15 June 2013
-;; Version:                     1.6
+;; Updated:			16 Feb 2014
+;; Version:                     1.7
 ;; Url:                         https://github.com/joddie/pcre2el
 ;; Package-Requires:            ((cl-lib "0.3"))
 
@@ -456,6 +456,7 @@
 (require 'cl-lib)
 (require 'rx)
 (require 're-builder)
+(require 'advice)
 
 ;;; Customization group
 (defgroup rxt nil
@@ -601,57 +602,229 @@ these commands only."
 
 ;;;###autoload
 (define-minor-mode pcre-mode
-    "Use emulated PCRE syntax wherever possible"
+    "Use emulated PCRE syntax for regexps wherever possible.
+
+Advises the `interactive' specs of `read-regexp' and the
+following other functions so that they read PCRE syntax and
+translate to its Emacs equivalent:
+
+- `align-regexp'
+- `find-tag-regexp'
+- `sort-regexp-fields'
+- `isearch-message-prefix'
+
+Also alters the behavior of `isearch-mode' when searching by regexp."
   nil " PCRE"
-  (let ((map (make-sparse-keymap)))
-    (define-key map [remap query-replace-regexp] 'pcre-query-replace-regexp)
-    (define-key map [remap replace-regexp]       'pcre-replace-regexp)
-    map)
-  :global t)
+  nil
+  :global t
+
+  (if pcre-mode
+      ;; Enabling
+      (progn
+        ;; Enable advice
+        (ad-enable-regexp "pcre-mode")
+        ;; Set up isearch hooks
+        (add-hook 'isearch-mode-hook #'pcre-isearch-mode-hook)
+        (add-hook 'isearch-mode-end-hook #'pcre-isearch-mode-end-hook))
+
+    ;; Disable advice
+    (ad-disable-regexp "pcre-mode")
+    ;; Remove from isearch hooks
+    (remove-hook 'isearch-mode-hook #'pcre-isearch-mode-hook)
+    (remove-hook 'isearch-mode-end-hook #'pcre-isearch-mode-end-hook))
+
+  ;; "Activating" advice re-computes the function definitions, which
+  ;; is necessary whether enabling or disabling
+  (ad-activate-regexp "pcre-mode"))
  
+(defvar pcre-old-isearch-search-fun-function nil
+  "Saved value of `isearch-search-fun-function' to restore on exiting `pcre-mode.'")
+(make-variable-buffer-local 'pcre-old-isearch-search-fun-function)
+
+;;; Cache of PCRE -> Elisp translations
+(defvar pcre-mode-cache-size 100
+  "Number of PCRE-to-Emacs translations to keep in the `pcre-mode' cache.")
+
+(defvar pcre-mode-cache (make-hash-table :test 'equal)
+  "Cache of PCRE-to-Emacs translations used in `pcre-mode'.
+
+Keys are PCRE regexps, values are their Emacs equivalents.")
+
+(defvar pcre-mode-reverse-cache (make-hash-table :test 'equal)
+  "Cache of original PCREs translated to Emacs syntax in `pcre-mode'.
+
+Keys are translated Emacs regexps, values are their original PCRE
+form.  This is used to display the original PCRE regexp in place
+of its translated form.")
+
+(defvar pcre-cache-ring (make-ring pcre-mode-cache-size)
+  "Ring of PCRE-to-Emacs translations used in `pcre-mode'.
+
+When the ring fills up, the oldest element is removed and the
+corresponding entries are deleted from the hash tables
+`pcre-mode-cache' and `pcre-mode-reverse-cache'.")
+
+(defun pcre-to-elisp/cached (pcre)
+  "Translate PCRE to Emacs syntax, caching both forms."
+  (or (gethash pcre pcre-mode-cache)
+      (let ((elisp (rxt-pcre-to-elisp pcre)))
+        (pcre-set-cache pcre elisp)
+        elisp)))
+
+(defun pcre-set-cache (pcre-regexp emacs-regexp)
+  "Add a PCRE-to-Emacs translation to the `pcre-mode' cache."
+  (when (and (not (zerop (length pcre-regexp)))
+             (not (zerop (length emacs-regexp)))
+             (not (gethash pcre-regexp pcre-mode-cache)))
+    (if (= (ring-length pcre-cache-ring) (ring-size pcre-cache-ring))
+        (let* ((old-item (ring-remove pcre-cache-ring))
+               (old-pcre (car old-item))
+               (old-emacs (cdr old-item)))
+          (remhash old-pcre pcre-mode-cache)
+          (remhash old-emacs pcre-mode-reverse-cache))
+      (puthash pcre-regexp emacs-regexp pcre-mode-cache)
+      (puthash emacs-regexp pcre-regexp pcre-mode-reverse-cache)
+      (ring-insert pcre-cache-ring (cons pcre-regexp emacs-regexp)))))
+
+;;; Isearch advice
+(defun pcre-isearch-mode-hook ()
+  (when (not (eq isearch-search-fun-function #'isearch-search-fun-default))
+    (message "Warning: pcre-mode overriding existing isearch function `%s'"
+             isearch-search-fun-function))
+  (setq pcre-old-isearch-search-fun-function isearch-search-fun-function)
+  (set (make-local-variable 'isearch-search-fun-function)
+       #'pcre-isearch-search-fun-function))
+
+(defun pcre-isearch-mode-end-hook ()
+  (setq isearch-search-fun-function pcre-old-isearch-search-fun-function))
+
+(defun pcre-isearch-search-fun-function ()
+  "Enable isearching using emulated PCRE syntax.
+
+This is set as the value of `isearch-search-fun-function' when
+`pcre-mode' is enabled.  Returns a function which searches using
+emulated PCRE regexps when `isearch-regexp' is true."
+  (if (not isearch-regexp)
+      (isearch-search-fun-default)
+    (lambda (string bound noerror)
+      ;; Raise an error if the regexp ends in an incomplete escape
+      ;; sequence (= odd number of backslashes).
+      ;; TODO: Perhaps this should really be handled in rxt-pcre-to-elisp?
+      (if (isearch-backslash string) (rxt-error "Trailing backslash"))
+      (let ((regexp (pcre-to-elisp/cached string)))
+        (if isearch-forward
+            (re-search-forward regexp bound noerror)
+          (re-search-backward regexp bound noerror))))))
+
+(defadvice isearch-message-prefix (after pcre-mode disable)
+  "Add \"PCRE\" to the Isearch message when searching by regexp in `pcre-mode'."
+  (when (and isearch-regexp
+             ;; Prevent an inaccurate message if our callback was
+             ;; removed somehow
+             (eq isearch-search-fun-function #'pcre-isearch-search-fun-function))
+    (let ((message ad-return-value))
+      ;; Some hackery to give replacement the same fontification as
+      ;; the original
+      (when
+          (let ((case-fold-search t)) (string-match "regexp" message))
+        (let* ((match (match-string 0 message))
+               (properties (text-properties-at 0 match))
+               (replacement (apply #'propertize "PCRE regexp" properties))
+               (new-message (replace-match replacement t t message)))
+          (setq ad-return-value new-message))))))
+
+(defadvice isearch-fallback
+    (before pcre-mode (want-backslash &optional allow-invalid to-barrier) disable)
+  "Hack to fall back correctly in `pcre-mode'. "
+  ;; A dirty hack to the internals of isearch.  Falling back to a
+  ;; previous match position is necessary when the (Emacs) regexp ends
+  ;; in "*", "?", "\{" or "\|": this is handled in
+  ;; `isearch-process-search-char' by calling `isearch-fallback' with
+  ;; `t' for the value of the first parameter, `want-backslash', in
+  ;; the last two cases.  With PCRE regexps, falling back should take
+  ;; place on "*", "?", "{" or "|", with no backslashes required.
+  ;; This advice handles the last two cases by unconditionally setting
+  ;; `want-backslash' to nil.
+  (ad-set-arg 0 nil))
+
+;;; Other hooks and defadvices
+(defun pcre-query-replace-regexp ()
+  "Perform `query-replace-regexp' using PCRE syntax.
+
+Consider using `pcre-mode' instead of this function."
+  (interactive)
+  (let ((old-pcre-mode pcre-mode))
+    (unwind-protect
+         (progn
+           (pcre-mode +1)
+           (call-interactively #'query-replace-regexp))
+      (pcre-mode (if old-pcre-mode 1 0)))))
+
+
+(defadvice add-to-history
+    (before pcre-mode (history-var newelt &optional maxelt keep-all) disable)
+  "Add the original PCRE to query-replace history in `pcre-mode'."
+  (when (eq history-var query-replace-from-history-variable)
+    (let ((original (gethash newelt pcre-mode-reverse-cache)))
+      (when original
+        (ad-set-arg 1 original)))))
+
+(defadvice query-replace-descr
+    (before pcre-mode (from) disable)
+  "Use the original PCRE in Isearch prompts in `pcre-mode'."
+  (let ((original (gethash from pcre-mode-reverse-cache)))
+    (when original
+      (ad-set-arg 0 original))))
+
 ;;; The `interactive' specs of the following functions are lifted
-;;; wholesale from their built-in counterparts: see `replace.el.gz'.
-;;; TODO: Is it better to use advice instead?
+;;; wholesale from the original built-ins, which see.
+(defadvice read-regexp
+    (around pcre-mode first (prompt &optional defaults history) disable)
+  "Read regexp using PCRE syntax and convert to Elisp equivalent."
+  (ad-set-arg 0 (concat "[PCRE] " prompt))
+  ad-do-it
+  (setq ad-return-value
+        (pcre-to-elisp/cached ad-return-value)))
 
-;;;###autoload
-(defun pcre-query-replace-regexp (regexp to-string &optional delimited start end)
-  "Perform `query-replace-regexp' using emulated PCRE regexp syntax."
+(defadvice align-regexp
+    (before pcre-mode first (beg end regexp &optional group spacing repeat) disable)
+  "Read regexp using PCRE syntax and convert to Elisp equivalent."
   (interactive
-   ;; the following interactive code was taken from replace.el from emacs
-   (let ((common
-          (query-replace-read-args
-           (concat "Query replace"
-                   (if current-prefix-arg " word" "")
-                   " PCRE regexp"
-                   (if (and transient-mark-mode mark-active) " in region" ""))
-           t)))
-     (list (nth 0 common) (nth 1 common) (nth 2 common)
-           ;; These are done separately here
-           ;; so that command-history will record these expressions
-           ;; rather than the values they had this time.
-           (if (and transient-mark-mode mark-active)
-               (region-beginning))
-           (if (and transient-mark-mode mark-active)
-               (region-end)))))
-  (query-replace-regexp (rxt-pcre-to-elisp regexp) to-string delimited start end))
+   (append
+    (list (region-beginning) (region-end))
+    (if current-prefix-arg
+	(list (rxt-pcre-to-elisp
+               (read-string "Complex align using PCRE regexp: "
+                            "(\\s*)"))
+	      (string-to-number
+	       (read-string
+		"Parenthesis group to modify (justify if negative): " "1"))
+	      (string-to-number
+	       (read-string "Amount of spacing (or column if negative): "
+			    (number-to-string align-default-spacing)))
+	      (y-or-n-p "Repeat throughout line? "))
+      (list (concat "\\(\\s-*\\)"
+		    (rxt-pcre-to-elisp
+                     (read-string "Align PCRE regexp: ")))
+	    1 align-default-spacing nil)))))
 
-;;;###autoload
-(defun pcre-replace-regexp (regexp to-string &optional delimited start end)
-  "Perform `replace-regexp' using emulated PCRE regexp syntax."
+(defadvice find-tag-regexp
+    (before pcre-mode first (regexp &optional next-p other-window) disable)
+  "Read regexp using PCRE syntax and convert to Elisp equivalent."
+  "Perform `find-tag-regexp' using emulated PCRE regexp syntax."
   (interactive
-   (let ((common
-	  (query-replace-read-args
-	   (concat "Replace"
-		   (if current-prefix-arg " word" "")
-		   " PCRE regexp"
-		   (if (and transient-mark-mode mark-active) " in region" ""))
-	   t)))
-     (list (nth 0 common) (nth 1 common) (nth 2 common)
-	   (if (and transient-mark-mode mark-active)
-	       (region-beginning))
-	   (if (and transient-mark-mode mark-active)
-	       (region-end)))))
-  (replace-regexp (rxt-pcre-to-elisp regexp) to-string delimited start end))
+   (let ((args (find-tag-interactive "[PCRE] Find tag regexp: " t)))
+     (list (rxt-pcre-to-elisp (nth 0 args))
+           (nth 1 args) (nth 2 args)))))
+
+(defadvice sort-regexp-fields
+    (before pcre-mode first (reverse record-regexp key-regexp beg end) disable)
+  "Read regexp using PCRE syntax and convert to Elisp equivalent."
+  (interactive "P\nsPCRE regexp specifying records to sort: \n\
+sPCRE regexp specifying key within record: \nr")
+  (ad-set-arg 1 (rxt-pcre-to-elisp (ad-get-arg 1)))
+  (ad-set-arg 2 (rxt-pcre-to-elisp (ad-get-arg 2))))
+
 
 
 ;;; Commands that translate Elisp to other formats
@@ -1048,6 +1221,16 @@ the kill ring; see the two functions named above for details."
           (overlay-put overlay 'face 'rxt-highlight-face))))))
 
 
+;;;; Error handling
+
+(put 'rxt-invalid-regexp
+     'error-conditions
+     '(error invalid-regexp rxt-invalid-regexp))
+
+(defun rxt-error (&rest format-args)
+  (signal 'rxt-invalid-regexp (list (apply #'format format-args))))
+
+
 ;;;; Regexp syntax tree data type
 
 ;; Base class that keeps the source text as a string with offsets
@@ -1056,7 +1239,7 @@ the kill ring; see the two functions named above for details."
     rxt-syntax-tree
   begin end source)
 
-(defun rxt-syntax-tree-readable (tree)  
+(defun rxt-syntax-tree-readable (tree)
   (cl-assert (rxt-syntax-tree-p tree))
   (let ((begin (rxt-syntax-tree-begin tree))
         (end (rxt-syntax-tree-end tree))
@@ -1064,7 +1247,7 @@ the kill ring; see the two functions named above for details."
     (if (and begin end source)
         (substring source begin end)
       (let ((print-level 1))
-        (prin1-to-string tree))))) 
+        (prin1-to-string tree)))))
 
 
 ;; Literal string
@@ -1256,7 +1439,7 @@ the kill ring; see the two functions named above for details."
 (defun rxt-syntax-class (symbol)
   (if (assoc symbol rx-syntax)
       (make-rxt-syntax-class :symbol symbol)
-    (error "Invalid syntax class symbol %s" symbol)))
+    (rxt-error "Invalid syntax class symbol %s" symbol)))
 
 ;;; Character categories (Emacs only)
 (cl-defstruct (rxt-char-category
@@ -1266,7 +1449,7 @@ the kill ring; see the two functions named above for details."
 (defun rxt-char-category (symbol)
   (if (assoc symbol rx-categories)
       (make-rxt-char-category :symbol symbol)
-    (error "Invalid character category symbol %s" symbol)))
+    (rxt-error "Invalid character category symbol %s" symbol)))
 
 
 ;;; Char sets
@@ -1326,7 +1509,7 @@ unchanged."
     (make-rxt-char-set-union :classes (list item)))
 
    (t
-    (error "Can't construct character set union from %S" item))))
+    (rxt-error "Can't construct character set union from %S" item))))
 
 ;;; Generalized union constructor: falls back to rxt-choice if
 ;;; necessary
@@ -1378,7 +1561,7 @@ modified."
         (rxt-char-set-adjoin! cset thing))))
 
    (t
-    (error "Can't adjoin non-rxt-char-set, character, range or symbol %S" item)))
+    (rxt-error "Can't adjoin non-rxt-char-set, character, range or symbol %S" item)))
   cset)
 
 
@@ -1412,7 +1595,7 @@ or a shorthand char-set specifier (see `rxt-char-set')`."
 	 (rxt-char-set-negation-elt cset))
 
 	(t
-	 (error "Can't negate non-char-set or syntax class %s" cset))))
+         (rxt-error "Can't negate non-char-set or syntax class %s" cset))))
 
 ;;; Intersections of char sets
 
@@ -1440,7 +1623,8 @@ or a shorthand char-set specifier (see `rxt-char-set')`."
 	(push cset elts))
 
        (t
-	(error "Can't take intersection of non-character-set %s" cset))))
+	(rxt-error "Can't take intersection of non-character-set %s" cset))))
+
     (if (null elts)
 	(rxt-negate cmpl)
       (unless (rxt-empty-char-set-p cmpl)
@@ -1780,7 +1964,7 @@ otherwise it would not match.")
 ;; parenthesized groups, assertions, etc.
 (defun rxt-parse-atom (&optional branch-begin)
   (if (eobp)
-      (error "Unexpected end of regular expression")
+      (rxt-error "Unexpected end of regular expression")
     (if rxt-parse-pcre
         (rxt-parse-atom/pcre)
       (rxt-parse-atom/el branch-begin))))
@@ -1840,7 +2024,7 @@ otherwise it would not match.")
                       (car (rassoc (string-to-char (match-string 2))
                                    rx-categories))))
                  (unless category
-                   (error "Unrecognized character category %s" (match-string 2)))
+                   (rxt-error "Unrecognized character category %s" (match-string 2)))
                  (let ((re (rxt-char-category category)))
                    (if negated (rxt-negate re) re)))))
         ;; Backreference
@@ -2008,16 +2192,16 @@ in character classes as outside them."
                     rxt-pcre-s-mode s)
               (cl-return rxt-empty-string))
              (t
-              (error "Unrecognized PCRE extended construction (?%s...)"
-                     (buffer-substring-no-properties begin (point)))))))
-         (t (error "Unrecognized PCRE extended construction ?%c"
-                   (char-after)))))
+              (rxt-error "Unrecognized PCRE extended construction (?%s...)"
+                         (buffer-substring-no-properties begin (point)))))))
+         (t (rxt-error "Unrecognized PCRE extended construction ?%c"
+                       (char-after)))))
        ;; No special "(* ...)" verbs are recognised
        ((rx "*")
         (let ((begin (point)))
           (search-forward ")")
-          (error "Unrecognized PCRE extended construction (*%s"
-                 (buffer-substring begin (point))))))
+          (rxt-error "Unrecognized PCRE extended construction (*%s"
+                     (buffer-substring begin (point))))))
       ;; Parse the remainder of the subgroup
       (unless shy (cl-incf rxt-subgroup-count))
       (let* ((rxt-pcre-extended-mode x)
@@ -2027,7 +2211,7 @@ in character classes as outside them."
         (rxt-fontify-token-case
          (")" (cons 'font-lock-builtin-face
                     (if shy rx (rxt-submatch rx))))
-         (t (error "Subexpression missing close paren")))))))
+         (t (rxt-error "Subexpression missing close paren")))))))
 
 (defun rxt-parse-subgroup/el ()
   (let ((shy
@@ -2039,7 +2223,7 @@ in character classes as outside them."
        ((rx "\\)")
         (cons 'font-lock-builtin-face
               (if shy rx (rxt-submatch rx))))
-       (t (error "Subexpression missing close paren"))))))
+       (t (rxt-error "Subexpression missing close paren"))))))
 
 (defun rxt-parse-braces ()
   (rxt-fontify-token-case
@@ -2057,13 +2241,13 @@ in character classes as outside them."
    (t
     (let ((begin (point)))
       (search-forward "}" nil 'go-to-end)
-      (error "Bad brace expression {%s"
-             (buffer-substring-no-properties begin (point)))))))
+      (rxt-error "Bad brace expression {%s"
+                 (buffer-substring-no-properties begin (point)))))))
 
 ;; Parse a character set range [...]
 (defun rxt-parse-char-class ()
   (when (eobp)
-    (error "Missing close right bracket in regexp"))
+    (rxt-error "Missing close right bracket in regexp"))
 
   (rxt-syntax-tree-value
    (let* ((negated (rxt-fontify-token-case
@@ -2079,7 +2263,7 @@ in character classes as outside them."
      (catch 'done
        (while t
          (when (eobp)
-           (error "Missing close right bracket in regexp"))
+           (rxt-error "Missing close right bracket in regexp"))
 
          (if (and (looking-at "\\]")
                   (not (= (point) begin)))
@@ -2130,11 +2314,11 @@ in character classes as outside them."
            (intern (match-string 1))))
     ;; Error on unknown posix-class-like syntax
     ((rx "[:" (* (any "a-z")) ":]")
-     (error "Unknown posix class %s" (match-string 0)))
+     (rxt-error "Unknown posix class %s" (match-string 0)))
     ;; Error on [= ... ]= collation syntax
     ((rx "[" (submatch (any "." "="))
          (* (any "a-z")) (backref 1) "]")
-     (error "%s collation syntax not supported" (match-string 0)))
+     (rxt-error "%s collation syntax not supported" (match-string 0)))
     ;; Other characters stand for themselves
     ((rx (or "\n" nonl))
      (cons font-lock-string-face (string-to-char (match-string 0)))))))
@@ -2234,7 +2418,7 @@ in character classes as outside them."
            (let ((n (rxt-backref-n re)))
              (if (<= n 9)
                  (list 'backref (rxt-backref-n re))
-               (error "Too many backreferences (%s)" n))))
+               (rxt-error "Too many backreferences (%s)" n))))
 
           ((rxt-syntax-class-p re)
            (list 'syntax (rxt-syntax-class-symbol re)))
@@ -2301,7 +2485,7 @@ in character classes as outside them."
            (list 'not (rxt-adt->rx (rxt-char-set-negation-elt re))))
 
           (t
-           (error "No RX translation for %s" re)))))
+           (rxt-error "No RX translation for %s" re)))))
 
     ;; Store source information on each fragment of the generated RX
     ;; sexp for rxt-explain mode
@@ -2339,7 +2523,7 @@ in character classes as outside them."
           (greedy (rxt-repeat-greedy re))
 	  (body (rxt-adt->sre (rxt-repeat-body re))))
       (when (not greedy)
-        (error "No SRE translation of non-greedy repetition %s" re))
+        (rxt-error "No SRE translation of non-greedy repetition %s" re))
       (cond
        ((and (zerop from) (null to)) (list '* body))
        ((and (equal from 1) (null to)) (list '+ body))
@@ -2377,7 +2561,7 @@ in character classes as outside them."
     (cons '& (mapcar #'rxt-adt->sre (rxt-char-set-intersection-elts re))))
 
    (t
-    (error "No SRE translation for %s" re))))
+    (rxt-error "No SRE translation for %s" re))))
 
 
 ;;;; 'Unparser' to PCRE notation
@@ -2411,7 +2595,7 @@ in character classes as outside them."
     (let ((s (rxt-primitive-pcre re)))
       (if s
 	  (list s 1)
-	(error "No PCRE translation for %s" re))))
+	(rxt-error "No PCRE translation for %s" re))))
 
    ((rxt-string-p re) (rxt-string->pcre re))
    ((rxt-seq-p re) (rxt-seq->pcre re))
@@ -2431,7 +2615,7 @@ in character classes as outside them."
    ;; ((rxt-char-set-intersection re) (rxt-char-set-intersection->pcre re))
 
    (t
-    (error "No PCRE translation for %s" re))))
+    (rxt-error "No PCRE translation for %s" re))))
 
 (defconst rxt-pcre-metachars (rx (any "\\^.$|()[]*+?{}")))
 (defconst rxt-pcre-charset-metachars (rx (any "]" "[" "\\" "^" "-")))
@@ -2527,10 +2711,10 @@ in character classes as outside them."
 	   (if (rxt-char-set-union-p elt)
 	       (list
 		(concat "[^" (rxt-char-set->pcre/chars elt) "]") 1)
-	     (error "No PCRE translation of %s" elt))))
+	     (rxt-error "No PCRE translation of %s" elt))))
 
 	(t
-	 (error "Non-char-set in rxt-char-set->pcre: %s" re))))
+	 (rxt-error "Non-char-set in rxt-char-set->pcre: %s" re))))
 
 ;; Fortunately, easier in PCRE than in POSIX!
 (defun rxt-char-set->pcre/chars (re)
