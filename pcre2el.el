@@ -748,6 +748,8 @@ emulated PCRE regexps when `isearch-regexp' is true."
   (ad-set-arg 0 nil))
 
 ;;; Other hooks and defadvices
+
+;;;###autoload
 (defun pcre-query-replace-regexp ()
   "Perform `query-replace-regexp' using PCRE syntax.
 
