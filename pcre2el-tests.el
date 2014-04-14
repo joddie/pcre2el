@@ -208,6 +208,31 @@
                                         :test #'string=)))))
 
 
+;;;; Elisp -> PCRE translation
+(ert-deftest rxt-pcre-repetitions ()
+  "Check that repetition and grouping have correct precedence in PCREs."
+  (should
+   (equal
+    (rxt-elisp-to-pcre (rx (repeat 3 5 "c")))
+    "c{3,5}"))
+
+  (should
+   (equal
+    (rxt-elisp-to-pcre (rx (repeat 3 5 "string")))
+    "(?:string){3,5}"))
+
+  (should
+   (equal
+    (rxt-elisp-to-pcre (rx (* "c")))
+    "c*"))
+
+  (should
+   (equal
+    (rxt-elisp-to-pcre (rx (* "string")))
+    "(?:string)*")))
+
+
+
 ;; The following tests are adapted from the first set of tests
 ;; ("testinput1") in the PCRE library's test suite: see
 ;; http://www.pcre.org/ and the copyright notice at the beginning of

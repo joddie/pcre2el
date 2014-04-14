@@ -2623,14 +2623,15 @@ in character classes as outside them."
 (defconst rxt-pcre-charset-metachars (rx (any "]" "[" "\\" "^" "-")))
 
 (defun rxt-string->pcre (re)
-  (list
-   (replace-regexp-in-string
-    rxt-pcre-metachars
-    "\\\\\\&" (rxt-string-chars re))
-   ;; A one-character string is a 'piece' (it binds to a following
-   ;; quantifier). A longer string is a 'branch' (it has to be
-   ;; enclosed in parentheses to bind to a following quantifier).
-   (if (> (length re) 1) 1 2)))
+  (let ((chars (rxt-string-chars re)))
+    (list
+     (replace-regexp-in-string
+      rxt-pcre-metachars
+      "\\\\\\&" chars)
+     ;; A one-character string is a 'piece' (it binds to a following
+     ;; quantifier).  A longer string is a 'branch' (it has to be
+     ;; enclosed in parentheses to bind to a following quantifier).
+     (if (> (length chars) 1) 2 1))))
 
 (defun rxt-seq->pcre (re)
   (let ((elts (rxt-seq-elts re)))
