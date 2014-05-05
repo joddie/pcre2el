@@ -11967,6 +11967,9 @@
        (regexp
 	(rxt-pcre-to-elisp "-- End of testinput1 --" "")))))
 
-
+(ert-deftest rxt-pcre-test-01057 nil
+  (should
+   (equal (rxt-elisp-to-rx "\\(?3:test\\)")
+          '(submatch-n 3 "test"))))
 
 ;;; pcre2el.tests.el ends here
