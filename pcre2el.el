@@ -457,6 +457,7 @@
 (require 'rx)
 (require 're-builder)
 (require 'advice)
+(require 'ring)
 
 ;;; Customization group
 (defgroup rxt nil
