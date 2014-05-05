@@ -491,7 +491,6 @@ these commands only."
   :group 'rxt
   :type 'boolean)
 
-
 
 ;;;; Macros and functions for writing interactive input and output
 
@@ -2793,6 +2792,8 @@ in character classes as outside them."
    ((rxt-choice-p re) (rxt-choice-elts->strings (rxt-choice-elts re)))
 
    ((rxt-submatch-p re) (rxt-adt->strings (rxt-submatch-body re)))
+   ((rxt-submatch-numbered-p re)
+    (rxt-adt->strings (rxt-submatch-numbered-body re)))
 
    ((rxt-repeat-p re) (rxt-repeat->strings re))
 
