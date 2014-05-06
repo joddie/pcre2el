@@ -457,6 +457,7 @@
 (require 'rx)
 (require 're-builder)
 (require 'advice)
+(require 'ring)
 
 ;;; Customization group
 (defgroup rxt nil
@@ -489,7 +490,6 @@ This overrides the value of `rxt-verbose-rxt-translation' for
 these commands only."
   :group 'rxt
   :type 'boolean)
-
 
 
 ;;;; Macros and functions for writing interactive input and output
@@ -636,7 +636,7 @@ Also alters the behavior of `isearch-mode' when searching by regexp."
   ;; "Activating" advice re-computes the function definitions, which
   ;; is necessary whether enabling or disabling
   (ad-activate-regexp "pcre-mode"))
- 
+
 (defvar pcre-old-isearch-search-fun-function nil
   "Saved value of `isearch-search-fun-function' to restore on exiting `pcre-mode.'")
 (make-variable-buffer-local 'pcre-old-isearch-search-fun-function)
@@ -1424,6 +1424,14 @@ the kill ring; see the two functions named above for details."
     (rxt-submatch
      (:constructor rxt-submatch (body))
      (:include rxt-syntax-tree))
+  body)
+
+;;; Numbered submatch (Emacs only)
+(cl-defstruct
+    (rxt-submatch-numbered
+     (:constructor rxt-submatch-numbered (n body))
+     (:include rxt-syntax-tree))
+  n
   body)
 
 ;;; Backreference
@@ -2216,15 +2224,27 @@ in character classes as outside them."
          (t (rxt-error "Subexpression missing close paren")))))))
 
 (defun rxt-parse-subgroup/el ()
-  (let ((shy
+  (let ((kind
          (rxt-fontify-token-case
-          ((rx "?:") (cons 'font-lock-builtin-face t)))))
-    (unless shy (cl-incf rxt-subgroup-count))
+          ((rx "?:")
+           (cl-incf rxt-subgroup-count)
+           (cons 'font-lock-builtin-face 'shy))
+          ((rx "?" (group (+ (in "0-9"))) ":")
+           (cons 'font-lock-builtin-face
+                 (let ((n (string-to-number (match-string 1))))
+                   (when (< rxt-subgroup-count n)
+                     (setf rxt-subgroup-count n))
+                   n)))
+          ((rx "?") ; Reserved
+           (rxt-error "Unknown match group sequence")))))
     (let ((rx (rxt-parse-exp)))
       (rxt-fontify-token-case
        ((rx "\\)")
         (cons 'font-lock-builtin-face
-              (if shy rx (rxt-submatch rx))))
+              (cond ((eq kind 'shy) rx)
+                    ((numberp kind)
+                     (rxt-submatch-numbered kind rx))
+                    (t (rxt-submatch rx)))))
        (t (rxt-error "Subexpression missing close paren"))))))
 
 (defun rxt-parse-braces ()
@@ -2415,6 +2435,17 @@ in character classes as outside them."
                      (mapcar #'rxt-adt->rx (rxt-seq-elts (rxt-submatch-body re))))
              (list (rxt-rx-symbol 'submatch)
                    (rxt-adt->rx (rxt-submatch-body re)))))
+
+          ((rxt-submatch-numbered-p re)
+           (if (rxt-seq-p (rxt-submatch-numbered-p re))
+               (cl-list* (rxt-rx-symbol 'submatch-n)
+                         (rxt-submatch-numbered-n re)
+                         (mapcar #'rxt-adt->rx
+                                 (rxt-seq-elts
+                                  (rxt-submatch-numbered-body re))))
+             (list (rxt-rx-symbol 'submatch-n)
+                   (rxt-submatch-numbered-n re)
+                   (rxt-adt->rx (rxt-submatch-numbered-body re)))))
 
           ((rxt-backref-p re)
            (let ((n (rxt-backref-n re)))
@@ -2761,6 +2792,8 @@ in character classes as outside them."
    ((rxt-choice-p re) (rxt-choice-elts->strings (rxt-choice-elts re)))
 
    ((rxt-submatch-p re) (rxt-adt->strings (rxt-submatch-body re)))
+   ((rxt-submatch-numbered-p re)
+    (rxt-adt->strings (rxt-submatch-numbered-body re)))
 
    ((rxt-repeat-p re) (rxt-repeat->strings re))
 
@@ -2945,7 +2978,7 @@ updates may become slow if too many are active at once."
         (run-with-timer 0.1 nil
                         (apply-partially 'rxt--refontify-regexp1
                                          overlay))))
- 
+
 (defun rxt--refontify-regexp1 (overlay)
   (let ((start (overlay-start overlay))
         (end   (overlay-end overlay)))
