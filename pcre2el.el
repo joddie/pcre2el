@@ -612,6 +612,7 @@ translate to its Emacs equivalent:
 - `find-tag-regexp'
 - `sort-regexp-fields'
 - `isearch-message-prefix'
+- `ibuffer-do-replace-regexp'
 
 Also alters the behavior of `isearch-mode' when searching by regexp."
   nil " PCRE"
@@ -809,6 +810,14 @@ Consider using `pcre-mode' instead of this function."
 		    (rxt-pcre-to-elisp
                      (read-string "Align PCRE regexp: ")))
 	    1 align-default-spacing nil)))))
+
+(defadvice ibuffer-do-replace-regexp
+  (before pcre-mode first (from-str to-str) disable)
+  "Read regexp using PCRE syntax and convert to Elisp equivalent."
+  (interactive
+   (let* ((from-str (read-from-minibuffer "[PCRE] Replace regexp: "))
+          (to-str (read-from-minibuffer (concat "[PCRE] Replace " from-str " with: "))))
+     (list (rxt-pcre-to-elisp from-str) to-str))))
 
 (defadvice find-tag-regexp
     (before pcre-mode first (regexp &optional next-p other-window) disable)
