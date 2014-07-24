@@ -2,11 +2,11 @@
 
 ;; Copyright (C) 2012-2014 Jon Oddie <jonxfield@gmail.com>
 
-;; Author:                      joddie <jonxfield at gmail.com>
-;; Hacked additionally by:      opensource at hardakers dot net
-;; Created:                     14 Feb 2012
-;; Updated:                     16 Feb 2014
-;; Version:                     1.7
+;; Author:			joddie <jonxfield at gmail.com>
+;; Hacked additionally by:	opensource at hardakers dot net
+;; Created:			14 Feb 2012
+;; Updated:			24 July 2014
+;; Version:                     1.8
 ;; Url:                         https://github.com/joddie/pcre2el
 ;; Package-Requires:            ((cl-lib "0.3"))
 
@@ -70,22 +70,22 @@
 
 ;;   - convert Emacs syntax to PCRE
 ;;   - convert either syntax to `rx', an S-expression based regexp syntax
-;;   - provide live font-locking of regexp syntax (so far only for Elisp
-;;     buffers -- other modes on the TODO list)
 ;;   - untangle complex regexps by showing the parse tree in `rx' form and
 ;;     highlighting the corresponding chunks of code
 ;;   - show the complete list of strings (productions) matching a regexp,
 ;;     provided the list is finite
+;;   - provide live font-locking of regexp syntax (so far only for Elisp
+;;     buffers -- other modes on the TODO list)
 
 
 ;; 2 Usage
 ;; =======
 
-;;   Enable `rxt-minor-mode' or its global equivalent `rxt-global-mode' to
-;;   get the default key-bindings. There are three sets of commands:
-;;   commands that take a PCRE regexp, commands which take an Emacs regexp,
-;;   and commands that try to do the right thing based on the current mode.
-;;   Currently, this means Emacs syntax in `emacs-lisp-mode' and
+;;   Enable `rxt-mode' or its global equivalent `rxt-global-mode' to get
+;;   the default key-bindings. There are three sets of commands: commands
+;;   that take a PCRE regexp, commands which take an Emacs regexp, and
+;;   commands that try to do the right thing based on the current
+;;   mode. Currently, this means Emacs syntax in `emacs-lisp-mode' and
 ;;   `lisp-interaction-mode', and PCRE syntax everywhere else.
 
 ;;   The default key bindings all begin with `C-c /' and have a mnemonic
@@ -128,7 +128,7 @@
 ;;   - When called with a prefix argument (`C-u'), they read a regular
 ;;     expression from the minibuffer literally, without further processing
 ;;     -- meaning there's no need to double the backslashes if it's an
-;;     Emacs regexp. This is the same way commands like
+;;     Emacs regexp.  This is the same way commands like
 ;;     `query-replace-regexp' read input.
 
 ;;   - When the region is active, they use they the region contents, again
@@ -165,7 +165,7 @@
 ;;   copy it to the kill ring. When translating something into Elisp
 ;;   syntax, you might need to use the result either literally (e.g. for
 ;;   interactive input to a command like `query-replace-regexp'), or as a
-;;   string to paste into Lisp code. To allow both uses,
+;;   string to paste into Lisp code.  To allow both uses,
 ;;   `rxt-pcre-to-elisp' copies both versions successively to the
 ;;   kill-ring. The literal regexp without string quoting is the top
 ;;   element of the kill-ring, while the Lisp string is the
@@ -193,14 +193,22 @@
 ;;   `rx-to-string' form or a string literal for this to work.
 
 
-;; 2.3 Query replace
-;; ~~~~~~~~~~~~~~~~~
+;; 2.3 PCRE mode (experimental)
+;; ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-;;   `pcre-query-replace-regexp' does query-replace using emulated PCRE
-;;   regexps. It is bound to `C-c / %' by default, by analogy with `M-%'.
+;;   If you want to use emulated PCRE regexp syntax in all Emacs commands,
+;;   try `pcre-mode', which uses Emacs's advice system to make all commands
+;;   that read regexps using the minibuffer use emulated PCRE syntax.  It
+;;   should also work with Isearch.
 
-;;   Put the following in your `.emacs' if you want to use PCRE query
-;;   replacement everywhere:
+;;   This feature is still fairly experimental.  It may fail to work or do
+;;   the wrong thing with certain commands.  Please report bugs.
+
+;;   `pcre-query-replace-regexp' was originally defined to do query-replace
+;;   using emulated PCRE regexps, and is now made somewhat obsolete by
+;;   `pcre-mode'.  It is bound to `C-c / %' by default, by analogy with
+;;   `M-%'.  Put the following in your `.emacs' if you want to use
+;;   PCRE-style query replacement everywhere:
 
 ;;   ,----
 ;;   | (global-set-key [(meta %)] 'pcre-query-replace-regexp)
@@ -231,15 +239,15 @@
 ;;   you find in the wild, try the 'explain' commands: `rxt-explain' (`C-c
 ;;   / /'), `rxt-explain-pcre' (`C-c / p') and `rxt-explain-elisp' (`C-c /
 ;;   e'). These display the original regexp along with its pretty-printed
-;;   `rx' equivalent in a new buffer. Moving moving point around either in
-;;   the original regexp or the `rx' translation highlights the
-;;   corresponding pieces of syntax, which helps in seeing things like what
-;;   the scope of quantifiers is.
+;;   `rx' equivalent in a new buffer.  Moving point around either in the
+;;   original regexp or the `rx' translation highlights corresponding
+;;   pieces of syntax, which can aid in seeing things like the scope of
+;;   quantifiers.
 
 ;;   I call them "explain" commands because the `rx' form is close to a
 ;;   plain syntax tree, and this plus the wordiness of the operators
-;;   usually helps to clarify what is going on. People who dislike Lisp
-;;   syntax might disagree, of course ... ;-)
+;;   usually helps to clarify what is going on.  People who dislike Lisp
+;;   syntax might disagree with this assessment.
 
 
 ;; 2.6 Generate all matching strings (productions)
@@ -251,7 +259,7 @@
 ;;   using `regexp-opt'). The commands `rxt-convert-to-strings' (`C-c /
 ;;   ′'), `rxt-pcre-to-strings' (`C-c / p ′') or `rxt-elisp-to-strings'
 ;;   (`C-c / e ′') accomplish this by generating all the matching strings
-;;   ("productions") of a regexp. (The productions are copied to the kill
+;;   ("productions") of a regexp.  (The productions are copied to the kill
 ;;   ring as a Lisp list).
 
 ;;   An example in Lisp code:
@@ -270,7 +278,7 @@
 ;;   error message. Due to the nature of permutations, it's still possible
 ;;   for a finite regexp to generate a huge number of productions, which
 ;;   will eat memory and slow down your Emacs. Be ready with `C-g' if
-;;   necessary ;-)
+;;   necessary.
 
 
 ;; 2.7 RE-Builder support
@@ -322,7 +330,7 @@
 ;;   - backreferences (various syntaxes), but only up to 9 per expression
 ;;   - alternation `|'
 ;;   - greedy and non-greedy quantifiers `*', `*?', `+', `+?', `?' and `??'
-;;     (all of which are the same in Elisp as in PCRE)
+;;           (all of which are the same in Elisp as in PCRE)
 ;;   - numerical quantifiers `{M,N}'
 ;;   - beginning/end of string `\A', `\Z'
 ;;   - string quoting `\Q .. \E'
@@ -331,9 +339,9 @@
 ;;     `\x', and `\octal digits' (but see below about non-ASCII characters)
 ;;   - character classes `[...]' including Posix escapes
 ;;   - character classes `\d', `\D', `\h', `\H', `\s', `\S', `\v', `\V'
-;;     both within character class brackets and outside
+;;           both within character class brackets and outside
 ;;   - word and non-word characters `\w' and `\W' (Emacs has the same
-;;     syntax, but its meaning is different)
+;;           syntax, but its meaning is different)
 ;;   - `s' (single line) and `x' (extended syntax) flags, in regexp
 ;;     literals, or set within the expression via `(?xs-xs)' or `(?xs-xs:
 ;;     .... )' syntax
@@ -365,19 +373,17 @@
 
 ;;   - Most of PCRE's rules for how `^', `\A', `$' and `\Z' interact with
 ;;     newlines are not implemented, since they seem less relevant to
-;;     Emacs's buffer-oriented rather than line-oriented model. However,
+;;     Emacs's buffer-oriented rather than line-oriented model.  However,
 ;;     the different meanings of the `.' metacharacter *are* implemented
 ;;     (it matches newlines with the `/s' flag, but not otherwise).
 
 ;;   - Not currently namespace clean (both `rxt-' and a couple of `pcre-'
-;;          functions).
+;;     functions).
 
 
 ;; 3.3 TODO:
 ;; ~~~~~~~~~
 
-;;   - PCRE forward- and backward-search (easy)
-;;   - PCREs in isearch mode (not so easy)
 ;;   - Python-specific extensions to PCRE?
 ;;   - Language-specific stuff to enable regexp font-locking and explaining
 ;;     in different modes. Each language would need two functions, which
@@ -385,10 +391,10 @@
 
 ;;     1. A function to read PCRE regexps, taking the string syntax into
 ;;        account. E.g., Python has single-quoted, double-quoted and raw
-;;        strings raw strings with different quoting rules. PHP has the
-;;        kind of belt-and-suspenders solution you would expect: regexps
-;;        are in strings, /and/ you have to include the `/ ... /'
-;;        delimiters! Duh.
+;;        strings, each with different quoting rules.  PHP has the kind of
+;;        belt-and-suspenders solution you would expect: regexps are in
+;;        strings, /and/ you have to include the `/ ...  /' delimiters!
+;;        Duh.
 
 ;;     2. A function to copy faces back from the parsed string to the
 ;;        original buffer text. This has to recognize any escape sequences
@@ -402,7 +408,7 @@
 ;;   regular expressions, parsers for Elisp and PCRE syntax, and
 ;;   "unparsers" from to PCRE, rx, and SRE syntax. Converting from a parsed
 ;;   syntax tree to Elisp syntax is a two-step process: first convert to
-;;   `rx' form, then let `rx-to-string' do the heavy lifting. See
+;;   `rx' form, then let `rx-to-string' do the heavy lifting.  See
 ;;   `rxt-parse-re', `rxt-adt->pcre', `rxt-adt->rx', and `rxt-adt->sre',
 ;;   and the section beginning "Regexp ADT" in pcre2el.el for details.
 
@@ -432,24 +438,31 @@
 ;;   end-of-word). Other things that might be done with huge regexps in
 ;;   other languages can be expressed more understandably in Elisp using
 ;;   combinations of `save-excursion' with the various searches (regexp,
-;;   literal, skip-syntax-forward, sexp-movement functions, etc.). IMHO, of
-;;   course ;-)
+;;   literal, skip-syntax-forward, sexp-movement functions, etc.).
 
-;;   There's not much percentage in using `rxt-pcre-to-elisp' to put PCREs
-;;   in a Lisp program you're going to maintain, since you still have to
-;;   double all the backslashes. Better to just use the converted result
-;;   (or better yet the `rx' form ;-)
+;;   There's not much point in using `rxt-pcre-to-elisp' to use PCRE
+;;   notation in a Lisp program you're going to maintain, since you still
+;;   have to double all the backslashes.  Better to just use the converted
+;;   result (or better yet, the `rx' form).
 
 
-;; 6 History
-;; =========
+;; 6 History and acknowledgments
+;; =============================
 
 ;;   This was originally created out of an answer to a stackoverflow
 ;;   question:
 ;;   [http://stackoverflow.com/questions/9118183/elisp-mechanism-for-converting-pcre-regexps-to-emacs-regexps]
 
-;;   Thanks to Wes Hardaker for the initial inspiration and subsequent
-;;   hacking, and to priyadarshan for requesting RX/SRE support!
+;;   Thanks to:
+
+;;   - Wes Hardaker (hardaker) for the initial inspiration and subsequent
+;;     hacking
+;;   - priyadarshan for requesting RX/SRE support
+;;   - Daniel Colascione (dcolascione) for a patch to support Emacs's
+;;     explicitly-numbered match groups
+;;   - Aaron Meurer (asmeurer) for requesting Isearch support
+;;   - Philippe Vaucher (silex) for a patch to support `ibuffer-do-replace-regexp'
+;;     in PCRE mode
 
 ;;; Code:
 
