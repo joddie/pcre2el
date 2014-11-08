@@ -1013,9 +1013,7 @@ interactively."
   (interactive (rxt-interactive/elisp))
   (let ((rxt-explain t)
         (rxt-verbose-rx-translation rxt-explain-verbosely))
-    (cl-destructuring-bind (ast fontified)
-        (rxt-parse-and-fontify regexp)
-      (rxt-pp-rx fontified (rxt-adt->rx ast)))))
+    (rxt-pp-rx regexp (rxt-elisp-to-rx regexp))))
 
 ;;;###autoload
 (defun rxt-explain-pcre (regexp &optional flags)
@@ -1788,7 +1786,7 @@ Returns two strings: the regexp and the flags."
 
 
 ;;; The following dynamically bound variables control the operation of
-;;; the parser (see `rxt-parse-and-fontify'.)
+;;; the parser (see `rxt-parse-re'.)
 
 (defvar rxt-parse-pcre nil
   "t if the rxt string parser is parsing PCRE syntax, nil for Elisp syntax.
@@ -1821,11 +1819,6 @@ otherwise it would not match.")
 (defvar rxt-source-text-string nil)
 
 (defun rxt-parse-re (re &optional pcre flags)
-  (cl-destructuring-bind (ast fontified)
-      (rxt-parse-and-fontify re pcre flags)
-    ast))
-
-(defun rxt-parse-and-fontify (re &optional pcre flags)
   (let* ((rxt-parse-pcre pcre)
          (rxt-pcre-extended-mode
           (and pcre (stringp flags) (rxt-extended-flag-p flags)))
@@ -1866,8 +1859,7 @@ otherwise it would not match.")
       (insert re)
       (goto-char (point-min))
       (let ((rxt-source-text-string re))
-        (list (rxt-parse-exp)
-              (buffer-string))))))
+        (rxt-parse-exp)))))
 
 ;; Parse a complete regex: a number of branches separated by | or
 ;; \|, as determined by `rxt-branch-end-regexp'.
