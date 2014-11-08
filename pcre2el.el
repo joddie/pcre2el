@@ -2046,10 +2046,6 @@ otherwise it would not match.")
       ;; character, not the whole string.
       (let ((begin (point)))
         (search-forward "\\E" nil t)
-        (put-text-property (match-beginning 0) ;FIXME
-                           (match-end 0)
-                           'font-lock-face
-                           'font-lock-builtin-face)
         (let* ((end (match-beginning 0))
                (str (buffer-substring-no-properties begin (1- end)))
                (char (char-to-string (char-before end))))
@@ -2139,9 +2135,6 @@ in character classes as outside them."
          ;; Comment (?# ...)
          ("#"
           (search-forward ")")
-          (put-text-property subgroup-begin (point)
-                             'font-lock-face
-                             'font-lock-comment-face)
           (cl-return rxt-empty-string))
          ;; Set modifiers (?xs-sx ... )
          ((rx (or
@@ -2254,8 +2247,6 @@ in character classes as outside them."
              (setq result
                    (funcall builder (list result cset)))))))
      ;; Skip over closing "]"
-     (put-text-property (point) (1+ (point))
-                        'font-lock-face 'font-lock-builtin-face)
      (forward-char)
      result)))
 
@@ -2269,9 +2260,6 @@ in character classes as outside them."
         (let ((r-end (save-match-data (rxt-maybe-parse-range-end))))
           (if (not r-end)
               atom
-            (put-text-property (match-beginning 1) (match-end 1)
-                               'font-lock-face
-                               'font-lock-builtin-face)
             (cons atom r-end)))
       atom)))
 
