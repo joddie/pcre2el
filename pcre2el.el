@@ -1195,13 +1195,15 @@ the kill ring; see the two functions named above for details."
       (t
        (prin1 rx (current-buffer))))
     (when (and re
-               (rxt-syntax-tree-begin re)
-               (rxt-syntax-tree-end re))
+               (rxt-location re)        ; FIXME
+               (rxt-location-start (rxt-location re))
+               (rxt-location-end (rxt-location re)))
       (let* ((sexp-begin (copy-marker begin t))
              (sexp-end (copy-marker (point)))
              (sexp-bounds (list sexp-begin sexp-end))
-             (source-begin (1+ (rxt-syntax-tree-begin re)))
-             (source-end (1+ (rxt-syntax-tree-end re)))
+             (source-location (rxt-location re))
+             (source-begin (1+ (rxt-location-start source-location)))
+             (source-end (1+ (rxt-location-end source-location)))
              (source-bounds (list source-begin source-end))
              (bounds (list source-bounds sexp-bounds))
              (sexp-ol (make-overlay sexp-begin sexp-end (current-buffer) t nil))
@@ -1235,22 +1237,47 @@ the kill ring; see the two functions named above for details."
 
 ;;;; Regexp syntax tree data type
 
-;; Base class that keeps the source text as a string with offsets
-;; beginning and ending parsed portion
-(cl-defstruct
-    rxt-syntax-tree
-  begin end source)
+;; Base class from which other elements of the syntax-tree inherit
+(cl-defstruct rxt-syntax-tree)
 
-(defun rxt-syntax-tree-readable (tree)
-  (cl-assert (rxt-syntax-tree-p tree))
-  (let ((begin (rxt-syntax-tree-begin tree))
-        (end (rxt-syntax-tree-end tree))
-        (source (rxt-syntax-tree-source tree)))
-    (if (and begin end source)
-        (substring source begin end)
+;; Struct representing the original source location
+(cl-defstruct rxt-location
+  source                                ; Either a string or a buffer
+  start end                             ; Offsets, 0- or 1-indexed as appropriate
+  )
+
+(defun rxt-location-text (location)
+  (if (not (rxt-location-p location))
+      nil
+    (let ((start  (rxt-location-start  location))
+          (end    (rxt-location-end    location))
+          (source (rxt-location-source location)))
+      (cond
+        ((buffer-live-p source)
+         (with-current-buffer source
+           (buffer-substring-no-properties start end)))
+        ((stringp source)
+         (substring source start end))
+        (t nil)))))
+
+;; Hash table mapping from syntax-tree elements to source locations.
+(defvar rxt-location-map (make-hash-table :weakness 'key))
+
+(defun rxt-location (object)
+  (gethash object rxt-location-map))
+
+(gv-define-setter rxt-location (value object)
+  `(puthash ,object ,value rxt-location-map))
+
+(defun rxt-source-text (object)
+  (rxt-location-text (rxt-location object)))
+
+(defun rxt-to-string (tree)
+  "Return a readable representation of TREE, a regex syntax-tree object."
+  (or (rxt-source-text tree)
       (let ((print-level 1))
-        (prin1-to-string tree)))))
-
+        (prin1-to-string tree))))
+(defalias 'rxt-syntax-tree-readable 'rxt-to-string)
 
 ;; Literal string
 (cl-defstruct
@@ -1259,7 +1286,8 @@ the kill ring; see the two functions named above for details."
      (:include rxt-syntax-tree))
   chars)
 
-(defvar rxt-empty-string (rxt-string ""))
+(defun rxt-empty-string ()
+  (rxt-string ""))
 
 (defun rxt-trivial-p (re)
   (and (rxt-string-p re)
@@ -1267,12 +1295,17 @@ the kill ring; see the two functions named above for details."
 
 (defun rxt-string-concat (&rest strs)
   (if (null strs)
-      rxt-empty-string
+      (rxt-empty-string)
     (let ((result
            (rxt-string (cl-reduce #'concat strs
-                                  :key #'rxt-string-chars))))
-      (setf (rxt-syntax-tree-begin result) (rxt-syntax-tree-begin (car strs))
-            (rxt-syntax-tree-end result) (rxt-syntax-tree-end (car (last strs))))
+                                  :key #'rxt-string-chars)))
+          (first (rxt-location (car strs)))
+          (last  (rxt-location (car (last strs)))))
+      (when (and first last)
+        (setf (rxt-location result)
+              (make-rxt-location :source (rxt-location-source first)
+                                 :start  (rxt-location-start first)
+                                 :end    (rxt-location-end last))))
       result)))
 
 ;;; Other primitives
@@ -1322,7 +1355,7 @@ the kill ring; see the two functions named above for details."
         (if (consp (cdr res))
             (make-rxt-seq res) ; General case
           (car res))           ; Singleton sequence
-      rxt-empty-string)))      ; Empty seq -- ""
+      (rxt-empty-string))))      ; Empty seq -- ""
 
 (defun rxt-seq-flatten (res)
   (if (consp res)
@@ -1415,7 +1448,7 @@ the kill ring; see the two functions named above for details."
 
 (cl-defun rxt-repeat (from to body &optional (greedy t))
   (if (equal to 0)
-      rxt-empty-string
+      (rxt-empty-string)
     (make-rxt-repeat :from from :to to
                      :body body :greedy greedy)))
 
@@ -1657,9 +1690,8 @@ or a shorthand char-set specifier (see `rxt-char-set')`."
 
 ;;;; Macros for building the parser
 
-(eval-when-compile
-  (defmacro rxt-token-case (&rest cases)
-    "Consume a token at point and evaluate corresponding forms.
+(defmacro rxt-token-case (&rest cases)
+  "Consume a token at point and evaluate corresponding forms.
 
 CASES is a list of `cond'-like clauses, (REGEXP BODY ...) where
 the REGEXPs define possible tokens which may appear at point. The
@@ -1673,37 +1705,31 @@ There can be a default case where REGEXP is `t', which evaluates
 the corresponding FORMS but does not move point.
 
 Returns `nil' if none of the CASES matches."
-    (declare (debug (&rest (sexp &rest form))))
-    `(cond
-      ,@(cl-loop for (token . action) in cases
-                 collect
-                 (if (eq token t)
-                     `(t ,@action)
-                   `((looking-at ,token)
-                     (goto-char (match-end 0))
-                     ,@action)))))
+  (declare (debug (&rest (sexp &rest form))))
+  `(cond
+     ,@(cl-loop for (token . action) in cases
+                collect
+                (if (eq token t)
+                    `(t ,@action)
+                  `((looking-at ,token)
+                    (goto-char (match-end 0))
+                    ,@action)))))
 
-  (defmacro rxt-syntax-tree-value (&rest body)
-    "Evaluate BODY, annotating its return value with source position information.
+(defmacro rxt-syntax-tree-value (&rest body)
+  "Evaluate BODY and record source location information on its value. 
 
-BODY must return an `rxt-syntax-tree' object. The value of
-`rxt-syntax-tree-value' is a modified `rxt-syntax-tree' object
-whose `rxt-syntax-tree-source' property is the string currently
-being parsed, and whose `rxt-syntax-tree-begin' and
-`rxt-syntax-tree-end' properties are the positions of point
-before and after evaluating BODY, respectively."
-    (declare (debug (&rest form)))
-    (let ((begin (make-symbol "begin"))
-          (value (make-symbol "value")))
-      `(let ((,begin (point))
-             (,value
-              (progn ,@body)))
-         (when (rxt-primitive-p ,value)
-           (setq ,value (copy-rxt-primitive ,value)))
-         (setf (rxt-syntax-tree-begin ,value) (1- ,begin)
-               (rxt-syntax-tree-end ,value) (1- (point))
-               (rxt-syntax-tree-source ,value) rxt-source-text-string)
-         ,value))))
+BODY may evaluate to any kind of object, but its value should
+generally not be `eq' to any other object."
+  (declare (debug (&rest form)))
+  (let ((begin (make-symbol "begin"))
+        (value (make-symbol "value")))
+    `(let ((,begin (point))
+           (,value ,(macroexp-progn body)))
+       (setf (rxt-location ,value)
+             (make-rxt-location :source rxt-source-text-string
+                                :start  (1- ,begin)
+                                :end    (1- (point))))
+       ,value)))
 
 ;; Read PCRE + flags
 (defun rxt-read-delimited-pcre ()
@@ -1817,6 +1843,12 @@ otherwise it would not match.")
 
 (defvar rxt-subgroup-count nil)
 (defvar rxt-source-text-string nil)
+
+(defun rxt-parse-pcre (re &optional flags)
+  (rxt-parse-re re t flags))
+
+(defun rxt-parse-elisp (re)
+  (rxt-parse-re re nil))
 
 (defun rxt-parse-re (re &optional pcre flags)
   (let* ((rxt-parse-pcre pcre)
@@ -2135,7 +2167,7 @@ in character classes as outside them."
          ;; Comment (?# ...)
          ("#"
           (search-forward ")")
-          (cl-return rxt-empty-string))
+          (cl-return (rxt-empty-string)))
          ;; Set modifiers (?xs-sx ... )
          ((rx (or
                (seq (group (* (any "xs"))) "-" (group (+ (any "xs"))))
@@ -2155,7 +2187,7 @@ in character classes as outside them."
               ;; rxt-parse-exp
               (setq rxt-pcre-extended-mode x
                     rxt-pcre-s-mode s)
-              (cl-return rxt-empty-string))
+              (cl-return (rxt-empty-string)))
              (t
               (rxt-error "Unrecognized PCRE extended construction (?%s...)"
                          (buffer-substring-no-properties begin (point)))))))

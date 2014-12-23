@@ -89,14 +89,126 @@
 ;; POSSIBILITY OF SUCH DAMAGE.
 
 
-
 ;;;; Code:
-
-;; Simple pcre->elisp tests
-
 (require 'pcre2el)
 (require 'ert)
 (require 'cl-lib)
+
+
+;;; Tests for source-location
+(ert-deftest rxt-location ()
+  (let ((dummy-1 (cl-gensym))
+        (dummy-2 (cl-gensym))
+        (location-1 (make-rxt-location :source "dummy 1"
+                                       :start 2
+                                       :end 5))
+        (location-2 (make-rxt-location :source "dummy 2"
+                                       :start 0
+                                       :end 4)))
+    (setf (rxt-location dummy-1) location-1)
+    (setf (rxt-location dummy-2) location-2)
+    (should (eq (rxt-location dummy-1) location-1))
+    (should (eq (rxt-location dummy-2) location-2))))
+
+(ert-deftest rxt-location-text ()
+  (let ((location-1 (make-rxt-location :source "dummy 1"
+                                       :start 2
+                                       :end 5))
+        (location-2 (make-rxt-location :source "dummy 2"
+                                       :start 0
+                                       :end 4)))
+    (should (string= (rxt-location-text location-1) "mmy"))
+    (should (string= (rxt-location-text location-2) "dumm"))))
+
+(ert-deftest rxt-syntax-tree-value ()
+  "Test recording of source location information"
+  (let ((string "dummy string") 
+        (dummy-1 (cl-gensym))
+        (dummy-2 (cl-gensym))
+        value-1 value-2)
+    (let ((rxt-source-text-string string))
+      (with-temp-buffer
+        (insert rxt-source-text-string)
+        (goto-char (point-min))
+        (setq value-1
+              (rxt-syntax-tree-value
+               (goto-char (point-max))
+               dummy-1)))
+
+      (with-temp-buffer
+        (insert rxt-source-text-string)
+        (goto-char (point-min))
+        (setq value-2
+              (rxt-syntax-tree-value
+               (forward-word)
+               dummy-2))))
+    
+    (should (eq value-1 dummy-1))
+    (should (eq value-2 dummy-2))
+    (let ((location (rxt-location value-1)))
+      (should (not (null location)))
+      (should (string= (rxt-location-source location) string))
+      (should (= 0 (rxt-location-start location)))
+      (should (= (length string) (rxt-location-end location)))
+      (should (string= string (rxt-location-text location))))
+
+    (let ((location (rxt-location value-2)))
+      (should (not (null location)))
+      (should (string= (rxt-location-source location) string))
+      (should (= 0 (rxt-location-start location)))
+      (should (= 5 (rxt-location-end location)))
+      (should (string= "dummy" (rxt-location-text location))))))
+
+
+;;; Syntax-tree tests
+(ert-deftest rxt-trivial-p ()
+  (should (rxt-trivial-p (rxt-empty-string))))
+
+(ert-deftest rxt-string-concat ()
+  (let* ((source "dummy string")
+         (string-1 (rxt-string "dummy "))
+         (string-2 (rxt-string "string")))
+    
+    (should (equal (rxt-string source)
+                   (rxt-string-concat string-1 string-2)))
+    
+    (setf (rxt-location string-1)
+          (make-rxt-location :source source :start 0 :end 6))
+    (setf (rxt-location string-2)
+          (make-rxt-location :source source :start 6 :end 12))
+    
+    (let ((result (rxt-string-concat string-1 string-2)))
+      (should (equal (rxt-string source) result))
+      (let ((location (rxt-location result)))
+        (should (not (null location)))
+        (should (eq source (rxt-location-source location)))
+        (should (= 0 (rxt-location-start location)))
+        (should (= 12 (rxt-location-end location)))))))
+
+
+;;; PCRE parsing tests
+(ert-deftest rxt-parse-pcre-simple-string ()
+  (let* ((string "simple string")
+         (parse (rxt-parse-pcre string)))
+    (should (equal (rxt-string string) parse))
+    (should (equal (rxt-source-text parse) string))))
+
+(ert-deftest rxt-parse-pcre-quoted-string ()
+  (cl-flet ((pcre-quote (string) (concat "\\Q" string "\\E")))
+    (let* ((string "Simple string without metacharacters")
+           (re (pcre-quote string))
+           (parse (rxt-parse-pcre re)))
+      (should (equal (rxt-string string) parse))
+      (should (equal re (rxt-source-text parse))))
+
+    (let* ((string "String $ with (( ) regexp \\ special [a-z] characters")
+           (re (pcre-quote string))
+           (parse (rxt-parse-pcre re)))
+      (should (equal (rxt-string string) parse))
+      (should (equal re (rxt-source-text parse))))))
+
+
+;;; Simple pcre->elisp tests
 
 ;; Regexp quoting
 (ert-deftest rxt-pcre-special-chars ()
