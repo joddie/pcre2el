@@ -185,6 +185,68 @@
         (should (= 0 (rxt-location-start location)))
         (should (= 12 (rxt-location-end location)))))))
 
+;; Sequence constructor
+(ert-deftest rxt-seq-empty ()
+  (should (equal (rxt-empty-string) (rxt-seq '()))))
+
+(ert-deftest rxt-seq-singleton ()
+  (let* ((string (rxt-string "sample string"))
+         (sequence (rxt-seq (list string))))
+    (should (equal string sequence))))
+
+(ert-deftest rxt-seq-join-strings ()
+  (let* ((string-1 (rxt-string "first"))
+         (string-2 (rxt-string "second"))
+         (string-3 (rxt-string "third"))
+         (sequence (rxt-seq (list string-1 string-2 string-3))))
+    (should (equal sequence
+                   (rxt-string (concat (rxt-string-chars string-1)
+                                       (rxt-string-chars string-2)
+                                       (rxt-string-chars string-3)))))))
+
+(ert-deftest rxt-seq-flatten-sequences ()
+  (let* ((sequence-1
+          (rxt-seq (list (rxt-bol)
+                         (rxt-string "word"))))
+         (nested-sequence
+          (rxt-seq (list sequence-1
+                         (rxt-anything)
+                         (rxt-eol))))
+         (flat-sequence
+          (rxt-seq (list (rxt-bol)
+                         (rxt-string "word")
+                         (rxt-anything)
+                         (rxt-eol)))))
+    (should (equal nested-sequence flat-sequence)))
+
+  (let* ((sequence (rxt-seq (list (rxt-bol)
+                                  (rxt-anything)
+                                  (rxt-eol))))
+         (nested-1 (rxt-seq (list sequence)))
+         (nested-2 (rxt-seq (list nested-1))))
+    (should (equal sequence nested-1))
+    (should (equal sequence nested-2))))
+
+(ert-deftest rxt-seq-remove-empty ()
+  (let ((sequence-1 (rxt-seq (list (rxt-bow)
+                                   (rxt-string "lorem ipsum")
+                                   (rxt-anything)
+                                   (rxt-eow))))
+        (sequence-2 (rxt-seq (list (rxt-empty-string)
+                                   (rxt-empty-string)
+                                   (rxt-bow)
+                                   (rxt-seq (list))
+                                   (rxt-string "lorem ipsum")
+                                   (rxt-seq (list))
+                                   (rxt-empty-string)
+                                   (rxt-anything)
+                                   (rxt-empty-string)
+                                   (rxt-eow)))))
+    (should (equal sequence-1 sequence-2))))
+
+;;; Choice constructor
+
+;;; Repeat 
 
 ;;; PCRE parsing tests
 (ert-deftest rxt-parse-pcre-simple-string ()
