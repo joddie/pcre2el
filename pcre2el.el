@@ -993,12 +993,10 @@ Throws an error if PCRE contains any infinite quantifiers."
 
 ;;; Regexp explaining functions to display pretty-printed rx syntax
 
-;; When the `rxt-explain' flag is non-nil, `rxt-adt->rx' links each
-;; part of the generated `rx' sexp to its corresponding part of the
-;; parse tree structure, using `rxt-explain-hash-map'.  This allows
-;; highlighting corresponding pieces of syntax at point.
+;; When the `rxt-explain' flag is non-nil, `rxt-adt->rx' records
+;; location information for each element of the generated `rx' form,
+;; allowing highlighting corresponding pieces of syntax at point.
 (defvar rxt-explain nil)
-(defvar rxt-explain-hash-map (make-hash-table :weakness 'key))
 
 (defvar rxt-highlight-overlays nil
   "List of active location-highlighting overlays in rxt-help-mode buffer.")
@@ -1174,8 +1172,7 @@ the kill ring; see the two functions named above for details."
 
 (cl-defun rxt-print-rx (rx &optional (depth 0))
   "Print RX like `print', adding text overlays for corresponding source locations."
-  (let ((re (gethash rx rxt-explain-hash-map))
-        (begin (point)))
+  (let ((begin (point)))
     (cl-typecase rx
       (cons
        (insert "(")
@@ -1194,23 +1191,25 @@ the kill ring; see the two functions named above for details."
        (rxt--insert-displaying-escapes (prin1-to-string rx)))
       (t
        (prin1 rx (current-buffer))))
-    (when (and re
-               (rxt-location re)        ; FIXME
-               (rxt-location-start (rxt-location re))
-               (rxt-location-end (rxt-location re)))
+    (let ((location (rxt-location rx)))
+      (when (and location
+                 (rxt-location-start location)
+                 (rxt-location-end location))
       (let* ((sexp-begin (copy-marker begin t))
              (sexp-end (copy-marker (point)))
              (sexp-bounds (list sexp-begin sexp-end))
-             (source-location (rxt-location re))
-             (source-begin (1+ (rxt-location-start source-location)))
-             (source-end (1+ (rxt-location-end source-location)))
+
+               (source-begin (1+ (rxt-location-start location)))
+               (source-end   (1+ (rxt-location-end   location)))
              (source-bounds (list source-begin source-end))
+
              (bounds (list source-bounds sexp-bounds))
+
              (sexp-ol (make-overlay sexp-begin sexp-end (current-buffer) t nil))
              (source-ol (make-overlay source-begin source-end (current-buffer) t nil)))
         (dolist (ol (list sexp-ol source-ol))
           (overlay-put ol 'priority depth)
-          (overlay-put ol 'rxt-bounds bounds))))))
+            (overlay-put ol 'rxt-bounds bounds)))))))
 
 (defun rxt-highlight-text ()
   "Highlight the regex syntax at point and its corresponding RX/string form."
@@ -2501,7 +2500,7 @@ in character classes as outside them."
       ;; occurrences of primitives like `bol'
       (when (symbolp rx)
         (setq rx (make-symbol (symbol-name rx))))
-      (puthash rx re rxt-explain-hash-map))
+      (setf (rxt-location rx) (rxt-location re)))
     rx))
 
 ;;; ADT -> SRE notation
