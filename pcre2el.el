@@ -1314,28 +1314,27 @@ the kill ring; see the two functions named above for details."
                (:include rxt-syntax-tree))
   pcre rx sre)
 
-(defvar rxt-bos (rxt-primitive "\\A" 'bos))
-(defvar rxt-eos (rxt-primitive "\\Z" 'eos))
+(defun rxt-bos () (rxt-primitive "\\A" 'bos))
+(defun rxt-eos () (rxt-primitive "\\Z" 'eos))
 
-(defvar rxt-bol (rxt-primitive "^" 'bol))
-(defvar rxt-eol (rxt-primitive "$" 'eol))
+(defun rxt-bol () (rxt-primitive "^" 'bol))
+(defun rxt-eol () (rxt-primitive "$" 'eol))
 
 ;; FIXME
-(defvar rxt-anything (rxt-primitive "." 'anything))
-(defvar rxt-nonl (rxt-primitive "." 'nonl))
+(defun rxt-anything () (rxt-primitive "." 'anything))
+(defun rxt-nonl () (rxt-primitive "." 'nonl))
 
-(defvar rxt-word-boundary (rxt-primitive "\\b" 'word-boundary))
-(defvar rxt-not-word-boundary (rxt-primitive "\\B" 'not-word-boundary))
+(defun rxt-word-boundary () (rxt-primitive "\\b" 'word-boundary))
+(defun rxt-not-word-boundary () (rxt-primitive "\\B" 'not-word-boundary))
 
-(defvar rxt-wordchar (rxt-primitive "\\w" 'wordchar))
-(defvar rxt-not-wordchar (rxt-primitive "\\W" 'not-wordchar))
+(defun rxt-wordchar () (rxt-primitive "\\w" 'wordchar))
+(defun rxt-not-wordchar () (rxt-primitive "\\W" 'not-wordchar))
 
-(defvar rxt-symbol-start (rxt-primitive nil 'symbol-start))
-(defvar rxt-symbol-end (rxt-primitive nil 'symbol-end))
+(defun rxt-symbol-start () (rxt-primitive nil 'symbol-start))
+(defun rxt-symbol-end () (rxt-primitive nil 'symbol-end))
 
-(defvar rxt-bow (rxt-primitive nil 'bow))
-(defvar rxt-eow (rxt-primitive nil 'eow))
-
+(defun rxt-bow () (rxt-primitive nil 'bow))
+(defun rxt-eow () (rxt-primitive nil 'eow))
 
 ;;; Sequence
 (cl-defstruct
@@ -1983,37 +1982,37 @@ otherwise it would not match.")
 (defun rxt-parse-atom/common ()
   (rxt-token-case
    ((rx "[")   (rxt-parse-char-class))
-   ((rx "\\b") rxt-word-boundary)
-   ((rx "\\B") rxt-not-word-boundary)))
+   ((rx "\\b") (rxt-word-boundary))
+   ((rx "\\B") (rxt-not-word-boundary))))
 
 (defun rxt-parse-atom/el (branch-begin)
   (rxt-syntax-tree-value
    (or (rxt-parse-atom/common)
        (rxt-token-case
         ;; "." wildcard
-        ((rx ".") rxt-nonl)
+        ((rx ".") (rxt-nonl))
         ;; "^" and "$" are metacharacters only at beginning or end of a
         ;; branch in Elisp; elsewhere they are literals
         ((rx "^")
          (if branch-begin
-             rxt-bol
+             (rxt-bol)
            (rxt-string "^")))
         ((rx "$")
          (if (looking-at rxt-branch-end-regexp)
-             rxt-eol
+             (rxt-eol)
            (rxt-string "$")))
         ;; Beginning & end of string, word, symbol
-        ((rx "\\`") rxt-bos)
-        ((rx "\\'") rxt-eos)
-        ((rx "\\<") rxt-bow)
-        ((rx "\\>") rxt-eow)
-        ((rx "\\_<") rxt-symbol-start)
-        ((rx "\\_>") rxt-symbol-end)
+        ((rx "\\`") (rxt-bos))
+        ((rx "\\'") (rxt-eos))
+        ((rx "\\<") (rxt-bow))
+        ((rx "\\>") (rxt-eow))
+        ((rx "\\_<") (rxt-symbol-start))
+        ((rx "\\_>") (rxt-symbol-end))
         ;; Subgroup
         ((rx "\\(") (rxt-parse-subgroup/el))
         ;; Word/non-word characters (meaning depending on syntax table)
-        ((rx "\\w") rxt-wordchar)
-        ((rx "\\W") rxt-not-wordchar)
+        ((rx "\\w") (rxt-wordchar))
+        ((rx "\\W") (rxt-not-wordchar))
         ;; Other syntax categories
         ((rx "\\"
              (submatch (any "Ss"))
@@ -2061,13 +2060,13 @@ otherwise it would not match.")
      ;; "." wildcard
      ((rx ".")
       (if rxt-pcre-s-mode
-          rxt-anything
-        rxt-nonl))
+          (rxt-anything)
+        (rxt-nonl)))
      ;; Beginning & end of string/line
-     ((rx "^") rxt-bol)
-     ((rx "$") rxt-eol)
-     ((rx "\\A") rxt-bos)
-     ((rx "\\Z") rxt-eos)
+     ((rx "^") (rxt-bol))
+     ((rx "$") (rxt-eol))
+     ((rx "\\A") (rxt-bos))
+     ((rx "\\Z") (rxt-eos))
      ;; Subgroup
      ((rx "(") (rxt-parse-subgroup/pcre))
      ;; Metacharacter quoting
