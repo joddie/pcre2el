@@ -3845,7 +3845,6 @@
 
 
 (ert-deftest rxt-pcre-test-00270 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
@@ -4085,7 +4084,6 @@
 
 
 (ert-deftest rxt-pcre-test-00287 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
@@ -4107,7 +4105,6 @@
 
 
 (ert-deftest rxt-pcre-test-00288 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
@@ -6650,7 +6647,6 @@
 
 
 (ert-deftest rxt-pcre-test-00545 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
@@ -6660,7 +6656,6 @@
 
 
 (ert-deftest rxt-pcre-test-00546 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
@@ -6690,7 +6685,6 @@
 
 
 (ert-deftest rxt-pcre-test-00549 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
@@ -6701,7 +6695,6 @@
 
 
 (ert-deftest rxt-pcre-test-00550 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
@@ -6709,7 +6702,6 @@
 
 
 (ert-deftest rxt-pcre-test-00551 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
@@ -6719,7 +6711,6 @@
 
 
 (ert-deftest rxt-pcre-test-00552 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
@@ -6749,7 +6740,6 @@
 
 
 (ert-deftest rxt-pcre-test-00555 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
@@ -6760,7 +6750,6 @@
 
 
 (ert-deftest rxt-pcre-test-00556 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
@@ -6768,7 +6757,6 @@
 
 
 (ert-deftest rxt-pcre-test-00557 nil
-  :expected-result :failed
   (let*
       ((case-fold-search t)
        (regexp
@@ -6778,7 +6766,6 @@
 
 
 (ert-deftest rxt-pcre-test-00558 nil
-  :expected-result :failed
   (let*
       ((case-fold-search t)
        (regexp
@@ -6788,7 +6775,6 @@
 
 
 (ert-deftest rxt-pcre-test-00559 nil
-  :expected-result :failed
   (let*
       ((case-fold-search t)
        (regexp
@@ -6798,7 +6784,6 @@
 
 
 (ert-deftest rxt-pcre-test-00560 nil
-  :expected-result :failed
   (let*
       ((case-fold-search t)
        (regexp
@@ -6820,7 +6805,6 @@
 
 
 (ert-deftest rxt-pcre-test-00562 nil
-  :expected-result :failed
   (let*
       ((case-fold-search t)
        (regexp
@@ -6828,7 +6812,6 @@
 
 
 (ert-deftest rxt-pcre-test-00563 nil
-  :expected-result :failed
   (let*
       ((case-fold-search t)
        (regexp
@@ -6838,7 +6821,6 @@
 
 
 (ert-deftest rxt-pcre-test-00564 nil
-  :expected-result :failed
   (let*
       ((case-fold-search t)
        (regexp
@@ -6859,7 +6841,6 @@
 
 
 (ert-deftest rxt-pcre-test-00566 nil
-  :expected-result :failed
   (let*
       ((case-fold-search t)
        (regexp
@@ -6867,7 +6848,6 @@
 
 
 (ert-deftest rxt-pcre-test-00567 nil
-  :expected-result :failed
   (let*
       ((case-fold-search t)
        (regexp
@@ -6877,7 +6857,6 @@
 
 
 (ert-deftest rxt-pcre-test-00568 nil
-  :expected-result :failed
   (let*
       ((case-fold-search t)
        (regexp
@@ -6887,7 +6866,6 @@
 
 
 (ert-deftest rxt-pcre-test-00569 nil
-  :expected-result :failed
   (let*
       ((case-fold-search t)
        (regexp
@@ -6897,7 +6875,6 @@
 
 
 (ert-deftest rxt-pcre-test-00570 nil
-  :expected-result :failed
   (let*
       ((case-fold-search t)
        (regexp
@@ -6918,7 +6895,6 @@
 
 
 (ert-deftest rxt-pcre-test-00572 nil
-  :expected-result :failed
   (let*
       ((case-fold-search t)
        (regexp
@@ -6926,7 +6902,6 @@
 
 
 (ert-deftest rxt-pcre-test-00573 nil
-  :expected-result :failed
   (let*
       ((case-fold-search t)
        (regexp
@@ -6936,7 +6911,6 @@
 
 
 (ert-deftest rxt-pcre-test-00574 nil
-  :expected-result :failed
   (let*
       ((case-fold-search t)
        (regexp
@@ -6957,7 +6931,6 @@
 
 
 (ert-deftest rxt-pcre-test-00576 nil
-  :expected-result :failed
   (let*
       ((case-fold-search t)
        (regexp
@@ -6965,7 +6938,6 @@
 
 
 (ert-deftest rxt-pcre-test-00577 nil
-  :expected-result :failed
   (let*
       ((case-fold-search t)
        (regexp
@@ -6976,7 +6948,6 @@
 
 
 (ert-deftest rxt-pcre-test-00578 nil
-  :expected-result :failed
   (let*
       ((case-fold-search t)
        (regexp
@@ -8192,7 +8163,6 @@
 
 
 (ert-deftest rxt-pcre-test-00689 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
@@ -8378,7 +8348,6 @@
 
 
 (ert-deftest rxt-pcre-test-00705 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp

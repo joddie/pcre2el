@@ -1278,12 +1278,16 @@ the kill ring; see the two functions named above for details."
         (prin1-to-string tree))))
 (defalias 'rxt-syntax-tree-readable 'rxt-to-string)
 
+;; FIXME
+(defvar rxt-pcre-case-fold)
+
 ;; Literal string
 (cl-defstruct
     (rxt-string
-     (:constructor rxt-string (chars))
-     (:include rxt-syntax-tree))
-  chars)
+      (:constructor rxt-string (chars &optional case-fold))
+      (:include rxt-syntax-tree))
+  chars
+  (case-fold rxt-pcre-case-fold))
 
 (defun rxt-empty-string ()
   (rxt-string ""))
@@ -1831,6 +1835,9 @@ of line.")
 When /s is used, PCRE's \".\" matches newline characters, which
 otherwise it would not match.")
 
+(defvar rxt-pcre-case-fold nil
+  "non-nil to emulate PCRE's case-insensitive \"/i\" mode in translated regexps.")
+
 (defvar rxt-branch-end-regexp nil)
 (defvar rxt-choice-regexp nil)
 (defvar rxt-brace-begin-regexp nil)
@@ -1854,6 +1861,8 @@ otherwise it would not match.")
           (and pcre (stringp flags) (rxt-extended-flag-p flags)))
          (rxt-pcre-s-mode
           (and pcre (stringp flags) (rxt-s-flag-p flags)))
+         (rxt-pcre-case-fold
+          (and pcre (stringp flags) (rxt-case-fold-flag-p flags)))
 
          ;; Bind regexps to match syntax that differs between PCRE and
          ;; Elisp only in the addition of a backslash "\"
@@ -1899,7 +1908,8 @@ otherwise it would not match.")
   ;; lasts until the end of a sub-expression
   (rxt-syntax-tree-value
    (let ((rxt-pcre-extended-mode rxt-pcre-extended-mode)
-         (rxt-pcre-s-mode rxt-pcre-s-mode))
+         (rxt-pcre-s-mode rxt-pcre-s-mode)
+         (rxt-pcre-case-fold rxt-pcre-case-fold))
      (if (eobp)
          (rxt-seq nil)
        (let ((branches '()))
@@ -2143,64 +2153,66 @@ in character classes as outside them."
     (string-to-number (match-string 1) 16))))
 
 (defun rxt-extended-flag-p (flags)
-  (if (string-match-p "x" flags) t nil))
+  (string-match-p "x" flags))
 
 (defun rxt-s-flag-p (flags)
-  (if (string-match-p "s" flags) t nil))
+  (string-match-p "s" flags))
+
+(defun rxt-case-fold-flag-p (flags)
+  (string-match-p "i" flags))
 
 (defun rxt-parse-subgroup/pcre ()
-  (cl-block nil
+  (catch 'return
     (let ((shy nil)
           (x rxt-pcre-extended-mode)
           (s rxt-pcre-s-mode)
+          (i rxt-pcre-case-fold)
           (subgroup-begin (1- (point))))
       (rxt-extended-skip)
       ;; Check for special (? ..) and (* ...) syntax
       (rxt-token-case
-       ;; Special (? ... ) groups
-       ((rx "?")                        ; (? ... )
+       ((rx "?")                        ; (?
         (rxt-token-case
-         ;; Shy group (?: ...)
-         (":" (setq shy t))
-         ;; Comment (?# ...)
-         ("#"
+         (":" (setq shy t))             ; Shy group (?:
+         ("#"                           ; Comment   (?#
           (search-forward ")")
-          (cl-return (rxt-empty-string)))
-         ;; Set modifiers (?xs-sx ... )
-         ((rx (or
-               (seq (group (* (any "xs"))) "-" (group (+ (any "xs"))))
-               (seq (group (+ (any "xs"))))))
+          (throw 'return (rxt-empty-string)))
+         ((rx (or                       ; Flags     (?isx-isx
+               (seq (group (* (any "isx"))) "-" (group (+ (any "isx"))))
+               (seq (group (+ (any "isx"))))))
           (let ((begin (match-beginning 0))
                 (on (or (match-string 1) (match-string 3)))
                 (off (or (match-string 2) "")))
-            (if (rxt-extended-flag-p on) (setq x t))
-            (if (rxt-s-flag-p on) (setq s t))
-            (if (rxt-extended-flag-p off) (setq x nil))
-            (if (rxt-s-flag-p off) (setq s nil))
-            (rxt-token-case
-             (":" (setq shy t))   ; Parse a shy group with these flags
-             (")"
-              ;; Set modifiers here to take effect for the remainder
-              ;; of this expression; they are let-bound in
-              ;; rxt-parse-exp
-              (setq rxt-pcre-extended-mode x
-                    rxt-pcre-s-mode s)
-              (cl-return (rxt-empty-string)))
-             (t
-              (rxt-error "Unrecognized PCRE extended construction (?%s...)"
-                         (buffer-substring-no-properties begin (point)))))))
-         (t (rxt-error "Unrecognized PCRE extended construction ?%c"
+            (if (rxt-extended-flag-p on)   (setq x t))
+            (if (rxt-s-flag-p on)          (setq s t))
+            (if (rxt-case-fold-flag-p on)  (setq i t))
+            (if (rxt-extended-flag-p off)  (setq x nil))
+            (if (rxt-s-flag-p off)         (setq s nil))
+            (if (rxt-case-fold-flag-p off) (setq i nil)))
+          (rxt-token-case
+           (":" (setq shy t))        ; Shy group with flags (?isx-isx: ...
+           (")"                      ; Set flags (?isx-isx)
+            ;; Set flags for the remainder of the current subexpression
+            (setq rxt-pcre-extended-mode x
+                  rxt-pcre-s-mode s
+                  rxt-pcre-case-fold i)
+            (throw 'return (rxt-empty-string)))))
+         ;; Other constructions like (?=, (?!, etc. are not recognised
+         (t (rxt-error "Unrecognized PCRE extended construction (?%c"
                        (char-after)))))
-       ;; No special "(* ...)" verbs are recognised
+
+       ;; No special (* ...) verbs are recognised
        ((rx "*")
         (let ((begin (point)))
           (search-forward ")")
           (rxt-error "Unrecognized PCRE extended construction (*%s"
                      (buffer-substring begin (point))))))
+
       ;; Parse the remainder of the subgroup
       (unless shy (cl-incf rxt-subgroup-count))
       (let* ((rxt-pcre-extended-mode x)
              (rxt-pcre-s-mode s)
+             (rxt-pcre-case-fold i)
              (rx (rxt-parse-exp)))
         (rxt-extended-skip)
         (rxt-token-case
@@ -2392,7 +2404,13 @@ in character classes as outside them."
           ((rxt-primitive-p re)
            (rxt-rx-symbol (rxt-primitive-rx re)))
 
-          ((rxt-string-p re) (rxt-string-chars re))
+          ((rxt-string-p re)
+           (if (or (not (rxt-string-case-fold re))
+                   (string= "" (rxt-string-chars re)))
+               (rxt-string-chars re)
+             `(seq
+               ,@(cl-loop for char across (rxt-string-chars re)
+                          collect `(any ,(upcase char) ,(downcase char))))))
 
           ((rxt-seq-p re)
            (cons (rxt-rx-symbol 'seq)
