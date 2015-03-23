@@ -1144,7 +1144,7 @@ the kill ring; see the two functions named above for details."
           (inhibit-read-only t))
       (erase-buffer)
       (rxt-help-mode)
-      (rxt--insert-displaying-escapes regexp)
+      (insert (rxt--propertize-whitespace regexp))
       (newline 2)
       (save-excursion
         (let ((sexp-begin (point)))
@@ -1154,21 +1154,6 @@ the kill ring; see the two functions named above for details."
           (widen)))
       (rxt-highlight-text))
     (pop-to-buffer (current-buffer))))
-
-(defun rxt--display-character-as (begin end char display)
-  (save-excursion
-    (goto-char begin)
-    (while (search-forward char end t)
-      (let ((ol (make-overlay (match-beginning 0) (match-end 0))))
-        (overlay-put ol 'display display)))))
-
-(defun rxt--insert-displaying-escapes (str)
-  (let ((begin (point)))
-    (insert str)
-    (rxt--display-character-as begin (point) "\n" "\\n")
-    (rxt--display-character-as begin (point) "\t" "\\t")
-    (rxt--display-character-as begin (point) "\f" "\\f")
-    (rxt--display-character-as begin (point) "\r" "\\r")))
 
 (cl-defun rxt-print-rx (rx &optional (depth 0))
   "Print RX like `print', adding text overlays for corresponding source locations."
@@ -1189,7 +1174,7 @@ the kill ring; see the two functions named above for details."
                         (insert ")"))
                     (insert ")")))))
       (string
-       (rxt--insert-displaying-escapes (prin1-to-string rx)))
+       (insert (rxt--propertize-whitespace (prin1-to-string rx))))
       ;; (number
       ;;  (insert "?" (char-to-string rx)))
       (t
@@ -1213,6 +1198,27 @@ the kill ring; see the two functions named above for details."
         (dolist (ol (list sexp-ol source-ol))
           (overlay-put ol 'priority depth)
             (overlay-put ol 'rxt-bounds bounds)))))))
+
+(defconst rxt--whitespace-display-alist
+  '(("\n" . "\\n")
+    ("\t" . "\\t")
+    ("\f" . "\\f")
+    ("\r" . "\\r")))
+
+(defconst rxt--whitespace-display-regexp
+  (regexp-opt (mapcar #'car rxt--whitespace-display-alist)))
+
+(defun rxt--propertize-whitespace (string)
+  (let ((string (copy-sequence string))
+        (start 0))
+    (while (string-match rxt--whitespace-display-regexp string start)
+      (put-text-property (match-beginning 0) (match-end 0)
+                         'display
+                         (assoc-default (match-string 0 string)
+                                        rxt--whitespace-display-alist)
+                         string)
+      (setq start (match-end 0)))
+    string))
 
 (defun rxt-highlight-text ()
   "Highlight the regex syntax at point and its corresponding RX/string form."

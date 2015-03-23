@@ -439,6 +439,21 @@
     (should (string= (print-to-string '(longer dotted . list))
                      "(longer dotted . list)"))))
 
+(ert-deftest rxt--propertize-whitespace ()
+  (let ((string (rxt--propertize-whitespace "\n\t\f\r")))
+    (should (equal (get-text-property 0 'display string) "\\n"))
+    (should (equal (get-text-property 1 'display string) "\\t"))
+    (should (equal (get-text-property 2 'display string) "\\f"))
+    (should (equal (get-text-property 3 'display string) "\\r")))
+
+  (let ((string (rxt--propertize-whitespace "String\n\twith\n\tnewlines and tabs")))
+    (should (equal (get-text-property 6 'display string) "\\n"))
+    (should (equal (get-text-property 7 'display string) "\\t"))
+    (should (equal (get-text-property 12 'display string) "\\n"))
+    (should (equal (get-text-property 13 'display string) "\\t"))))
+
+
+
 
 ;; The following tests are adapted from the first set of tests
 ;; ("testinput1") in the PCRE library's test suite: see
