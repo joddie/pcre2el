@@ -1279,7 +1279,7 @@ the kill ring; see the two functions named above for details."
 (defalias 'rxt-syntax-tree-readable 'rxt-to-string)
 
 ;; FIXME
-(defvar rxt-pcre-case-fold)
+(defvar rxt-pcre-case-fold nil)
 
 ;; Literal string
 (cl-defstruct
@@ -1519,7 +1519,8 @@ the kill ring; see the two functions named above for details."
                (:include rxt-syntax-tree))
   chars    ; list of single characters
   ranges   ; list of ranges (from . to)
-  classes) ; list of character classes
+  classes ; list of character classes
+  (case-fold rxt-pcre-case-fold))
 
 ;; Test for empty character set
 (defun rxt-empty-char-set-p (cset)
@@ -2489,21 +2490,31 @@ in character classes as outside them."
                  (list '** from to body))))))
 
           ((rxt-char-set-union-p re)
-           (if (and (null (rxt-char-set-union-chars re))
-                    (null (rxt-char-set-union-ranges re))
-                    (= 1 (length (rxt-char-set-union-classes re))))
-               (car (rxt-char-set-union-classes re))
-             (append
-              '(any)
-              (and (rxt-char-set-union-chars re)
-                   (mapcar 'char-to-string (rxt-char-set-union-chars re)))
+           (let ((chars (rxt-char-set-union-chars re))
+                 (ranges (rxt-char-set-union-ranges re))
+                 (classes (rxt-char-set-union-classes re))
+                 (case-fold (rxt-char-set-union-case-fold re)))
+             (if (and (null chars)
+                      (null ranges)
+                      (= 1 (length classes)))
+                 (car classes)
+               `(any
+                 ,@(when chars
+                         (apply #'string
+                                (if case-fold
+                                    (cl-loop for char in chars
+                                             nconc (list (upcase char)
+                                                         (downcase char)))
+                                  chars)))
 
-              (mapcar
-               (lambda (range)
-                 (format "%c-%c" (car range) (cdr range)))
-               (rxt-char-set-union-ranges re))
+                 ,@(if case-fold
+                       (cl-loop for (begin . end) in ranges
+                                nconc
+                                (list (cons begin end)
+                                      (cons (upcase begin) (upcase end))))
+                       ranges)
 
-              (rxt-char-set-union-classes re))))
+                 ,@classes))))
 
           ((rxt-char-set-negation-p re)
            (list 'not (rxt-adt->rx (rxt-char-set-negation-elt re))))
