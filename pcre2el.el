@@ -1296,21 +1296,6 @@ the kill ring; see the two functions named above for details."
   (and (rxt-string-p re)
        (equal (rxt-string-chars re) "")))
 
-(defun rxt-string-concat (&rest strs)
-  (if (null strs)
-      (rxt-empty-string)
-    (let ((result
-           (rxt-string (cl-reduce #'concat strs
-                                  :key #'rxt-string-chars)))
-          (first (rxt-location (car strs)))
-          (last  (rxt-location (car (last strs)))))
-      (when (and first last)
-        (setf (rxt-location result)
-              (make-rxt-location :source (rxt-location-source first)
-                                 :start  (rxt-location-start first)
-                                 :end    (rxt-location-end last))))
-      result)))
-
 ;;; Other primitives
 (cl-defstruct (rxt-primitive
                (:constructor rxt-primitive (pcre rx &optional (sre rx)))
@@ -1374,6 +1359,23 @@ the kill ring; see the two functions named above for details."
                 (cdr tail)))
               (t (cons re tail))))
     '()))
+
+(defun rxt-string-concat (str1 str2)
+  (if (not (eq (rxt-string-case-fold str1)
+               (rxt-string-case-fold str2)))
+      (make-rxt-seq (list str1 str2))
+    (let ((result
+           (rxt-string (concat (rxt-string-chars str1)
+                               (rxt-string-chars str2))
+                       (rxt-string-case-fold str1)))
+          (first (rxt-location str1))
+          (last  (rxt-location str2)))
+      (when (and first last)
+        (setf (rxt-location result)
+              (make-rxt-location :source (rxt-location-source first)
+                                 :start  (rxt-location-start first)
+                                 :end    (rxt-location-end last))))
+      result)))
 
 ;;; Choice
 (cl-defstruct

@@ -195,6 +195,7 @@
     (should (equal string sequence))))
 
 (ert-deftest rxt-seq-join-strings ()
+  ;; Strings with the same case-folding setting are folded together
   (let* ((string-1 (rxt-string "first"))
          (string-2 (rxt-string "second"))
          (string-3 (rxt-string "third"))
@@ -202,7 +203,16 @@
     (should (equal sequence
                    (rxt-string (concat (rxt-string-chars string-1)
                                        (rxt-string-chars string-2)
-                                       (rxt-string-chars string-3)))))))
+                                       (rxt-string-chars string-3))))))
+
+  ;; Strings with different case-folding behaviours are not folded
+  ;; together
+  (let* ((string-1 (rxt-string "case-sensitive" nil))
+         (string-2 (rxt-string "case-insensitive" t))
+         (sequence (rxt-seq (list string-1 string-2))))
+    (should (rxt-seq-p sequence))
+    (should (equal (rxt-seq-elts sequence)
+                   (list string-1 string-2)))))
 
 (ert-deftest rxt-seq-flatten-sequences ()
   (let* ((sequence-1
@@ -246,7 +256,12 @@
 
 ;;; Choice constructor
 
-;;; Repeat 
+;; FIXME
+
+;;; Repeat
+
+;; FIXME
+
 
 ;;; PCRE parsing tests
 (ert-deftest rxt-parse-pcre-simple-string ()
@@ -3551,7 +3566,6 @@
 
 
 (ert-deftest rxt-pcre-test-00252 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
@@ -8007,7 +8021,6 @@
 
 
 (ert-deftest rxt-pcre-test-00678 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
@@ -8019,7 +8032,6 @@
 
 
 (ert-deftest rxt-pcre-test-00679 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
