@@ -422,6 +422,24 @@
 
 
 
+;; Pretty-printing / explain tests
+
+(ert-deftest rxt--print-rx ()
+  ;; Test that lists and dotted lists are printed correctly
+  (cl-flet ((print-to-string (form)
+              (with-temp-buffer
+                (rxt-print-rx form)
+                (buffer-string))))
+    (should (string= (print-to-string '(normal list))
+                     "(normal list)"))
+    (should (string= (print-to-string '(short-list))
+                     "(short-list)"))
+    (should (string= (print-to-string '(dotted . pair))
+                     "(dotted . pair)"))
+    (should (string= (print-to-string '(longer dotted . list))
+                     "(longer dotted . list)"))))
+
+
 ;; The following tests are adapted from the first set of tests
 ;; ("testinput1") in the PCRE library's test suite: see
 ;; http://www.pcre.org/ and the copyright notice at the beginning of

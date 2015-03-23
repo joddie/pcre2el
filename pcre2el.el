@@ -1185,10 +1185,13 @@ the kill ring; see the two functions named above for details."
                       (if (consp tl)
                           (insert " ")
                         (insert " . ")
-                        (rxt-print-rx tl (+ depth 1)))
+                        (rxt-print-rx tl (+ depth 1))
+                        (insert ")"))
                     (insert ")")))))
       (string
        (rxt--insert-displaying-escapes (prin1-to-string rx)))
+      ;; (number
+      ;;  (insert "?" (char-to-string rx)))
       (t
        (prin1 rx (current-buffer))))
     (let ((location (rxt-location rx)))
