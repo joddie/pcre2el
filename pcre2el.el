@@ -2693,27 +2693,24 @@ in character classes as outside them."
   (cl-destructuring-bind (s lev) (rxt-adt->pcre/lev re) s))
 
 (defun rxt-adt->pcre/lev (re)
-  (cond
-   ((rxt-primitive-p re)
-    (let ((s (rxt-primitive-pcre re)))
-      (if s
-          (list s 1)
-        (rxt-error "No PCRE translation for %s" re))))
+  (cl-typecase re
+    (rxt-primitive
+     (let ((s (rxt-primitive-pcre re)))
+       (if s
+           (list s 1)
+         (rxt-error "No PCRE translation for %s" re))))
 
-   ((rxt-string-p re) (rxt-string->pcre re))
-   ((rxt-seq-p re) (rxt-seq->pcre re))
-   ((rxt-choice-p re) (rxt-choice->pcre re))
-
-   ((rxt-submatch-p re) (rxt-submatch->pcre re))
-   ((rxt-backref-p re)
+   (rxt-string (rxt-string->pcre re))
+   (rxt-seq (rxt-seq->pcre re))
+   (rxt-choice (rxt-choice->pcre re))
+   (rxt-submatch (rxt-submatch->pcre re))
+   (rxt-backref
     (list (format "\\%d" (rxt-backref-n re)) 1))
+   (rxt-repeat (rxt-repeat->pcre re))
 
-   ((rxt-repeat-p re) (rxt-repeat->pcre re))
-
-   ((or (rxt-char-set-union-p re)
-        (rxt-char-set-negation-p re))
+   ((or rxt-char-set-union rxt-char-set-negation)
     (rxt-char-set->pcre re))
-
+   
    ;; FIXME
    ;; ((rxt-char-set-intersection re) (rxt-char-set-intersection->pcre re))
 
@@ -2854,24 +2851,26 @@ in character classes as outside them."
 ;;;; Generate all productions of a finite regexp
 
 (defun rxt-adt->strings (re)
-  (cond
-   ((rxt-primitive-p re) (list ""))
-
-   ((rxt-string-p re) (list (rxt-string-chars re)))
-   ((rxt-seq-p re) (rxt-seq-elts->strings (rxt-seq-elts re)))
-   ((rxt-choice-p re) (rxt-choice-elts->strings (rxt-choice-elts re)))
-
-   ((rxt-submatch-p re) (rxt-adt->strings (rxt-submatch-body re)))
-   ((rxt-submatch-numbered-p re)
-    (rxt-adt->strings (rxt-submatch-numbered-body re)))
-
-   ((rxt-repeat-p re) (rxt-repeat->strings re))
-
-   ((rxt-char-set-union-p re) (rxt-char-set->strings re))
-
-   (t
-    (error "Can't generate productions of %s"
-           (rxt-syntax-tree-readable re)))))
+  (cl-typecase re
+    (rxt-primitive
+     (list ""))
+    (rxt-string
+     (list (rxt-string-chars re)))
+    (rxt-seq
+     (rxt-seq-elts->strings (rxt-seq-elts re)))
+    (rxt-choice
+     (rxt-choice-elts->strings (rxt-choice-elts re)))
+    (rxt-submatch
+     (rxt-adt->strings (rxt-submatch-body re)))
+    (rxt-submatch-numbered
+     (rxt-adt->strings (rxt-submatch-numbered-body re)))
+    (rxt-repeat
+     (rxt-repeat->strings re))
+    (rxt-char-set-union
+     (rxt-char-set->strings re))
+    (t
+     (error "Can't generate productions of %s"
+            (rxt-syntax-tree-readable re)))))
 
 (defun rxt-concat-product (heads tails)
   (cl-mapcan
