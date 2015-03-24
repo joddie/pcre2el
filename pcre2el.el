@@ -1940,16 +1940,16 @@ otherwise it would not match.")
 (defun rxt-parse-elisp (re)
   (rxt-parse-re re nil))
 
-(defun rxt-parse-re (re pcre)
-  (let* ((rxt-parse-pcre pcre)
-         (flags (and pcre (rxt--flags re)))
+(defun rxt-parse-re (re pcre-p)
+  (let* ((rxt-parse-pcre pcre-p)
+         (flags (and pcre-p (rxt--flags re)))
          (rxt-pcre-extended-mode (cl-find ?x flags))
          (rxt-pcre-s-mode        (cl-find ?s flags))
          (rxt-pcre-case-fold     (cl-find ?i flags))
 
          ;; Bind regexps to match syntax that differs between PCRE and
          ;; Elisp only in the addition of a backslash "\"
-         (escape (if pcre "" "\\"))
+         (escape (if pcre-p "" "\\"))
          (rxt-choice-regexp
           (rx-to-string `(seq ,escape "|")))
          (rxt-branch-end-regexp
@@ -1971,7 +1971,7 @@ otherwise it would not match.")
 
          ;; Named character classes [: ... :] differ slightly
          (rxt-named-classes-regexp
-          (if pcre
+          (if pcre-p
               rxt-pcre-named-classes-regexp
             rxt-elisp-named-classes-regexp))
 
