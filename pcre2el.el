@@ -546,24 +546,23 @@ these commands only."
 ;; literal or an expression) and use its value. Falls back to method
 ;; (1) if this fails to produce a string value.
 ;;
-(defun rxt-interactive/elisp (&optional prompt)
+(cl-defun rxt-interactive/elisp (&optional (prompt "Emacs regexp: "))
   (list
-   (let ((prompt (or prompt "Emacs regexp: ")))
-     (cond (current-prefix-arg
-            (read-string prompt))
+   (cond (current-prefix-arg
+          (read-string prompt))
 
-           ((use-region-p)
-            (buffer-substring-no-properties (region-beginning) (region-end)))
+         ((use-region-p)
+          (buffer-substring-no-properties (region-beginning) (region-end)))
 
-           (t
-            (condition-case nil
-                (save-excursion
-                  (while (nth 3 (syntax-ppss)) (forward-char))
-                  (let ((re (eval (preceding-sexp))))
-                    (if (stringp re) re
-                      (read-string prompt))))
-              (error
-               (read-string prompt))))))))
+         (t
+          (condition-case nil
+              (save-excursion
+                (while (nth 3 (syntax-ppss)) (forward-char))
+                (let ((re (eval (preceding-sexp))))
+                  (if (stringp re) re
+                    (read-string prompt))))
+            (error
+             (read-string prompt)))))))
 
 ;; Read a PCRE regexp interactively.
 ;;
@@ -575,21 +574,20 @@ these commands only."
 ;; Returns the regexp, with flags as text properties.
 ;;
 ;; TODO: Different delimiters
-(defun rxt-interactive/pcre (&optional prompt)
-  (let ((prompt (or prompt "PCRE regexp: ")))
-    (list
-     (cond (current-prefix-arg
-            (rxt--read-pcre prompt))
+(cl-defun rxt-interactive/pcre (&optional (prompt "PCRE regexp: "))
+  (list
+   (cond (current-prefix-arg
+          (rxt--read-pcre prompt))
 
-           ((use-region-p)
-            (buffer-substring-no-properties (region-beginning) (region-end)))
+         ((use-region-p)
+          (buffer-substring-no-properties (region-beginning) (region-end)))
 
-           (t
-            (condition-case nil
-                (rxt-read-delimited-pcre)
-              (error                     ; Fall back to reading from minibuffer
-               (rxt--read-pcre prompt)))))
-     nil)))
+         (t
+          (condition-case nil
+              (rxt-read-delimited-pcre)
+            (error                     ; Fall back to reading from minibuffer
+             (rxt--read-pcre prompt)))))
+   nil))
 
 (defvar rxt--read-pcre-map
   (let ((map (make-sparse-keymap)))
