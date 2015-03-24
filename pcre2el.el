@@ -651,13 +651,6 @@ In extended mode, whitespace is not significant."
         (inhibit-read-only t))
     (put-text-property (point-min) (minibuffer-prompt-end) 'display prompt)))
 
-;; Macro: interactively call one of two functions depending on the
-;; major mode
-(defmacro rxt-mode-dispatch (elisp-function pcre-function)
-  `(if (memq major-mode '(emacs-lisp-mode lisp-interaction-mode))
-       (call-interactively #',elisp-function)
-     (call-interactively #',pcre-function)))
-
 
 ;;;; Minor mode for using emulated PCRE syntax
 
@@ -1106,6 +1099,13 @@ interactively."
 
 
 ;;;; Commands that depend on the major mode in effect
+
+;; Macro: interactively call one of two functions depending on the
+;; major mode
+(defmacro rxt-mode-dispatch (elisp-function pcre-function)
+  `(if (memq major-mode '(emacs-lisp-mode lisp-interaction-mode))
+       (call-interactively #',elisp-function)
+     (call-interactively #',pcre-function)))
 
 ;;;###autoload
 (defun rxt-explain ()
