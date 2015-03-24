@@ -564,25 +564,27 @@ these commands only."
 ;; m/.../, or qr/.../ following point in the current buffer. Falls
 ;; back to reading from minibuffer if that fails.
 ;;
-;; Returns two values: the regexp and the flags, if any.
+;; Returns the regexp, with flags as text properties.
 ;;
 ;; TODO: Different delimiters
 ;;
 (defun rxt-interactive/pcre (&optional prompt)
   (let ((prompt (or prompt "PCRE regexp: ")))
     (cond (current-prefix-arg
-           (list (read-string prompt) ""))
+           (propertize (read-string prompt)
+                       'rxt-pcre-flags ""))
 
           ((use-region-p)
-           (list
+           (propertize
             (buffer-substring-no-properties (region-beginning) (region-end))
-            ""))
+            'rxt-pcre-flags ""))
 
           (t
            (condition-case nil
                (rxt-read-delimited-pcre)
              (error
-              (list (read-string prompt) "")))))))
+              (propertize (read-string prompt)
+                          'rxt-pcre-flags "")))))))
 
 ;; Macro: interactively call one of two functions depending on the
 ;; major mode
@@ -832,7 +834,7 @@ sPCRE regexp specifying key within record: \nr")
 
 
 
-;;; Commands that translate Elisp to other formats
+;;; Commands that take Emacs-style regexps as input
 
 ;;;###autoload
 (defun rxt-elisp-to-pcre (regexp)
@@ -851,7 +853,7 @@ it to the kill ring.
 Emacs regexp features such as syntax classes which cannot be
 translated to PCRE will cause an error."
   (interactive (rxt-interactive/elisp))
-  (rxt-value pcre (rxt-adt->pcre (rxt-parse-re regexp))))
+  (rxt-value pcre (rxt-adt->pcre (rxt-parse-elisp regexp))))
 
 ;;;###autoload
 (defun rxt-elisp-to-rx (regexp)
@@ -861,7 +863,7 @@ See `rxt-elisp-to-pcre' for a description of the interactive
 behavior and `rx' for documentation of the S-expression based
 regexp syntax."
   (interactive (rxt-interactive/elisp))
-  (rxt-value sexp (rxt-adt->rx (rxt-parse-re regexp))))
+  (rxt-value sexp (rxt-adt->rx (rxt-parse-elisp regexp))))
 
 ;;;###autoload
 (defun rxt-elisp-to-sre (regexp)
@@ -876,7 +878,7 @@ http://www.scsh.net/docu/post/sre.html.
 Emacs regexp features, including backreferences, which cannot be
 translated to SRE will cause an error."
   (interactive (rxt-interactive/elisp))
-  (rxt-value sexp (rxt-adt->sre (rxt-parse-re regexp))))
+  (rxt-value sexp (rxt-adt->sre (rxt-parse-elisp regexp))))
 
 ;;;###autoload
 (defun rxt-elisp-to-strings (regexp)
@@ -891,7 +893,7 @@ on).
 
 Throws an error if REGEXP contains any infinite quantifiers."
   (interactive (rxt-interactive/elisp))
-  (rxt-value sexp (rxt-adt->strings (rxt-parse-re regexp))))
+  (rxt-value sexp (rxt-adt->strings (rxt-parse-elisp regexp))))
 
 ;;;###autoload
 (defun rxt-toggle-elisp-rx ()
@@ -956,7 +958,10 @@ PCRE regexp features that cannot be translated into Emacs syntax
 will cause an error. See the commentary section of pcre2el.el for
 more details."
   (interactive (rxt-interactive/pcre))
-  (rxt-value emacs (rx-to-string (rxt-pcre-to-rx pcre flags) t)))
+  (rxt-value emacs
+             (rx-to-string
+              (rxt-pcre-to-rx (rxt--add-flags pcre flags))
+              t)))
 
 ;;;###autoload
 (defalias 'pcre-to-elisp 'rxt-pcre-to-elisp)
@@ -967,7 +972,7 @@ more details."
 
 See `rxt-pcre-to-elisp' for a description of the interactive behavior."
   (interactive (rxt-interactive/pcre))
-  (rxt-value sexp (rxt-adt->rx (rxt-parse-re pcre t flags))))
+  (rxt-value sexp (rxt-adt->rx (rxt-parse-pcre (rxt--add-flags pcre flags)))))
 
 ;;;###autoload
 (defun rxt-pcre-to-sre (pcre &optional flags)
@@ -977,7 +982,7 @@ See `rxt-pcre-to-elisp' for a description of the interactive
 behavior and `rxt-elisp-to-sre' for information about the SRE
 S-expression format."
   (interactive (rxt-interactive/pcre))
-  (rxt-value sexp (rxt-adt->sre (rxt-parse-re pcre t flags))))
+  (rxt-value sexp (rxt-adt->sre (rxt-parse-pcre (rxt--add-flags pcre flags)))))
 
 ;;;###autoload
 (defun rxt-pcre-to-strings (pcre &optional flags)
@@ -988,7 +993,13 @@ behavior and `rxt-elisp-to-strings' for why this might be useful.
 
 Throws an error if PCRE contains any infinite quantifiers."
   (interactive (rxt-interactive/pcre))
-  (rxt-value sexp (rxt-adt->strings (rxt-parse-re pcre t flags))))
+  (rxt-value sexp (rxt-adt->strings (rxt-parse-pcre (rxt--add-flags pcre flags)))))
+
+(defun rxt--add-flags (pcre flags)
+  "Return PCRE, with FLAGS as a text property."
+  (if flags
+      (propertize pcre 'rxt-pcre-flags flags)
+    pcre))
 
 
 ;;; Regexp explaining functions to display pretty-printed rx syntax
@@ -1023,7 +1034,7 @@ interactively."
   (interactive (rxt-interactive/pcre))
   (let ((rxt-explain t)
         (rxt-verbose-rx-translation rxt-explain-verbosely))
-    (rxt-pp-rx regexp (rxt-pcre-to-rx regexp flags))))
+    (rxt-pp-rx regexp (rxt-pcre-to-rx regexp))))
 
 
 ;;;; Commands that depend on the major mode in effect
@@ -1861,14 +1872,15 @@ otherwise it would not match.")
 (defvar rxt-subgroup-count nil)
 (defvar rxt-source-text-string nil)
 
-(defun rxt-parse-pcre (re &optional flags)
-  (rxt-parse-re re t flags))
+(defun rxt-parse-pcre (re)
+  (rxt-parse-re re t))
 
 (defun rxt-parse-elisp (re)
   (rxt-parse-re re nil))
 
-(defun rxt-parse-re (re &optional pcre flags)
+(defun rxt-parse-re (re pcre)
   (let* ((rxt-parse-pcre pcre)
+         (flags (and pcre (get-text-property 0 'rxt-pcre-flags re)))
          (rxt-pcre-extended-mode
           (and pcre (stringp flags) (rxt-extended-flag-p flags)))
          (rxt-pcre-s-mode
@@ -2963,12 +2975,13 @@ in character classes as outside them."
           (cond ((eq reb-re-syntax 'read)
                  (print re (current-buffer)))
                 ;; For PCRE syntax the value of reb-regexp-src is a
-                ;; list (REGEXP FLAGS)
+                ;; string with flags as text properties
                 ((eq reb-re-syntax 'pcre)
-                 (let ((src (reb-target-binding reb-regexp-src)))
+                 (let* ((src (reb-target-binding reb-regexp-src))
+                        (flags (get-text-property 0 'rxt-pcre-flags src)))
                    (if (not src)
                        (insert "\n//")
-                     (insert "\n/" (car src) "/" (cadr src)))))
+                     (insert "\n/" src "/" (or flags "")))))
 
                 ((eq reb-re-syntax 'string)
                  (insert "\n\"" re "\""))
