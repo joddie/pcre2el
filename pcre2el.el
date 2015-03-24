@@ -1590,26 +1590,19 @@ the kill ring; see the two functions named above for details."
 ;;; Char sets
 ;; <rxt-char-set> ::= <rxt-char-set-union>
 ;;                  | <rxt-char-set-negation>
-;;                  | <rxt-choice> ; where all rxt-choice-elts are char sets
 ;;                  | <rxt-char-set-intersection>
 
-(defun rxt-char-set-p (cset)
-  (or (rxt-char-set-union-p cset)
-      (rxt-char-set-negation-p cset)
-      (rxt-char-set-intersection-p cset)
-      ;; (and (rxt-choice-p cset)
-      ;;      (every #'rxt-char-set-p (rxt-choice-elts cset)))
-      ))
+(cl-defstruct (rxt-char-set (:include rxt-syntax-tree)))
 
 ;; An rxt-char-set-union represents the union of any number of
 ;; characters, character ranges, and POSIX character classes: anything
 ;; that can be represented in string notation as a class [ ... ]
 ;; without the negation operator.
 (cl-defstruct (rxt-char-set-union
-               (:include rxt-syntax-tree))
+                (:include rxt-char-set))
   chars    ; list of single characters
   ranges   ; list of ranges (from . to)
-  classes ; list of character classes
+  classes  ; list of character classes
   (case-fold rxt-pcre-case-fold))
 
 ;; Test for empty character set
@@ -1708,7 +1701,7 @@ modified."
 ;; notation as [^ ... ] (but see `rxt-char-set-intersection', below), plus
 ;; Emacs' \Sx and \Cx constructions.
 (cl-defstruct (rxt-char-set-negation
-               (:include rxt-syntax-tree))
+               (:include rxt-char-set))
   elt)
 
 ;; Complement constructor: checks types, unwraps existing negations
@@ -1742,7 +1735,7 @@ or a shorthand char-set specifier (see `rxt-char-set')`."
 ;; == (- word ("abc"))
 
 (cl-defstruct (rxt-char-set-intersection
-               (:include rxt-syntax-tree))
+               (:include rxt-char-set))
   elts)
 
 ;; Intersection constructor
