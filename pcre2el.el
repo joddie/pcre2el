@@ -480,7 +480,7 @@ etc."
 (defcustom rxt-explain-verbosely t
   "Non-nil if `rxt-explain-elisp' and `rxt-explain-pcre' should use verbose `rx' primitives.
 
-This overrides the value of `rxt-verbose-rxt-translation' for
+This overrides the value of `rxt-verbose-rx-translation' for
 these commands only."
   :group 'rxt
   :type 'boolean)
@@ -2465,10 +2465,8 @@ in character classes as outside them."
   "Alist of verbose equivalents for short `rx' primitives.")
 
 (defun rxt-rx-symbol (sym)
-  (if (or rxt-verbose-rx-translation
-          (and rxt-explain
-               rxt-explain-verbosely))
-      (or (cdr (assoc sym rxt-rx-verbose-equivalents))
+  (if rxt-verbose-rx-translation
+      (or (assoc-default sym rxt-rx-verbose-equivalents)
           sym)
     sym))
 
