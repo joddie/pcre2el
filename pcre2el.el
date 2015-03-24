@@ -1942,13 +1942,10 @@ otherwise it would not match.")
 
 (defun rxt-parse-re (re pcre)
   (let* ((rxt-parse-pcre pcre)
-         (flags (and pcre (get-text-property 0 'rxt-pcre-flags re)))
-         (rxt-pcre-extended-mode
-          (and pcre (stringp flags) (rxt-extended-flag-p flags)))
-         (rxt-pcre-s-mode
-          (and pcre (stringp flags) (rxt-s-flag-p flags)))
-         (rxt-pcre-case-fold
-          (and pcre (stringp flags) (rxt-case-fold-flag-p flags)))
+         (flags (and pcre (rxt--flags re)))
+         (rxt-pcre-extended-mode (cl-find ?x flags))
+         (rxt-pcre-s-mode        (cl-find ?s flags))
+         (rxt-pcre-case-fold     (cl-find ?i flags))
 
          ;; Bind regexps to match syntax that differs between PCRE and
          ;; Elisp only in the addition of a backslash "\"
@@ -2238,15 +2235,6 @@ in character classes as outside them."
    ((rx "\\x{" (submatch (* (any "0-9" "A-Z" "a-z"))) "}")
     (string-to-number (match-string 1) 16))))
 
-(defun rxt-extended-flag-p (flags)
-  (string-match-p "x" flags))
-
-(defun rxt-s-flag-p (flags)
-  (string-match-p "s" flags))
-
-(defun rxt-case-fold-flag-p (flags)
-  (string-match-p "i" flags))
-
 (defun rxt-parse-subgroup/pcre ()
   (catch 'return
     (let ((shy nil)
@@ -2269,12 +2257,12 @@ in character classes as outside them."
           (let ((begin (match-beginning 0))
                 (on (or (match-string 1) (match-string 3)))
                 (off (or (match-string 2) "")))
-            (if (rxt-extended-flag-p on)   (setq x t))
-            (if (rxt-s-flag-p on)          (setq s t))
-            (if (rxt-case-fold-flag-p on)  (setq i t))
-            (if (rxt-extended-flag-p off)  (setq x nil))
-            (if (rxt-s-flag-p off)         (setq s nil))
-            (if (rxt-case-fold-flag-p off) (setq i nil)))
+            (if (cl-find ?x on)  (setq x t))
+            (if (cl-find ?s on)  (setq s t))
+            (if (cl-find ?i on)  (setq i t))
+            (if (cl-find ?x off) (setq x nil))
+            (if (cl-find ?s off) (setq s nil))
+            (if (cl-find ?i off) (setq i nil)))
           (rxt-token-case
            (":" (setq shy t))        ; Shy group with flags (?isx-isx: ...
            (")"                      ; Set flags (?isx-isx)
