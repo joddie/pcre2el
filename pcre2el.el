@@ -567,24 +567,83 @@ these commands only."
 ;; Returns the regexp, with flags as text properties.
 ;;
 ;; TODO: Different delimiters
-;;
 (defun rxt-interactive/pcre (&optional prompt)
   (let ((prompt (or prompt "PCRE regexp: ")))
-    (cond (current-prefix-arg
-           (propertize (read-string prompt)
-                       'rxt-pcre-flags ""))
+    (list
+     (cond (current-prefix-arg
+            (rxt--read-pcre prompt))
 
-          ((use-region-p)
-           (propertize
-            (buffer-substring-no-properties (region-beginning) (region-end))
-            'rxt-pcre-flags ""))
+           ((use-region-p)
+            (buffer-substring-no-properties (region-beginning) (region-end)))
 
-          (t
-           (condition-case nil
-               (rxt-read-delimited-pcre)
-             (error
-              (propertize (read-string prompt)
-                          'rxt-pcre-flags "")))))))
+           (t
+            (condition-case nil
+                (rxt-read-delimited-pcre)
+              (error                     ; Fall back to reading from minibuffer
+               (rxt--read-pcre prompt)))))
+     nil)))
+
+(defvar rxt--read-pcre-map
+  (let ((map (make-sparse-keymap)))
+    (set-keymap-parent map minibuffer-local-map)
+    (define-key map (kbd "C-c s") #'rxt--toggle-s-mode)
+    (define-key map (kbd "C-c x") #'rxt--toggle-x-mode)
+    (define-key map (kbd "C-c i") #'rxt--toggle-i-mode)
+    map)
+  "Minibuffer keymap for `rxt--read-pcre'.")
+
+(defvar rxt--read-flags nil
+  "Flags to apply to the PCRE regexp being read, as a list of characters.
+Currently the /s, /x and /i flags are supported to some extent.")
+
+(defvar rxt--base-prompt nil
+  "Current minibuffer prompt for `rxt--read-pcre'.")
+
+(defun rxt--read-pcre (prompt)
+  "Read a PCRE regexp for translation, together with option flags.
+
+Currently `s' and `x' modes can be toggled with the following
+commands: \\<rxt--read-pcre-map>
+
+\\[rxt--toggle-s-mode] : toggle `s' (single-line) mode
+\\[rxt--toggle-x-mode] : toggle `x' (extended) mode
+\\[rxt--toggle-i-mode] : toggle `i' (case-insensitive) mode
+
+In single-line mode, `.' will match newlines.
+In extended mode, whitespace is not significant."
+  (let ((rxt--read-flags nil)
+        (rxt--base-prompt prompt))
+    (rxt--add-flags
+     (read-from-minibuffer prompt nil rxt--read-pcre-map)
+     (apply #'string rxt--read-flags))))
+
+(defun rxt--toggle-s-mode ()
+  "Toggle emulated PCRE single-line (s) flag."
+  (interactive)
+  (rxt--toggle-flag ?s))
+
+(defun rxt--toggle-x-mode ()
+  "Toggle emulated PCRE extended (x) flag."
+  (interactive)
+  (rxt--toggle-flag ?x))
+
+(defun rxt--toggle-i-mode ()
+  "Toggle emulated PCRE case-insensitive (i) flag."
+  (interactive)
+  (rxt--toggle-flag ?i))
+
+(defun rxt--toggle-flag (char)
+  "Toggle CHAR, a PCRE flag, in `rxt--read-flags'."
+  (setq rxt--read-flags
+        (if (memq char rxt--read-flags)
+            (delq char rxt--read-flags)
+          (cons char rxt--read-flags)))
+  (let ((prompt
+         (if rxt--read-flags
+             (concat rxt--base-prompt "(?" rxt--read-flags ") ")
+           rxt--base-prompt))
+        (inhibit-read-only t))
+    (put-text-property (point-min) (minibuffer-prompt-end) 'display prompt)))
 
 ;; Macro: interactively call one of two functions depending on the
 ;; major mode
@@ -994,6 +1053,9 @@ behavior and `rxt-elisp-to-strings' for why this might be useful.
 Throws an error if PCRE contains any infinite quantifiers."
   (interactive (rxt-interactive/pcre))
   (rxt-value sexp (rxt-adt->strings (rxt-parse-pcre (rxt--add-flags pcre flags)))))
+
+(defun rxt--flags (pcre)
+  (get-text-property 0 'rxt-pcre-flags pcre))
 
 (defun rxt--add-flags (pcre flags)
   "Return PCRE, with FLAGS as a text property."
@@ -1785,7 +1847,7 @@ Returns two strings: the regexp and the flags."
           (let ((pcre (buffer-substring-no-properties beg end)))
             (rxt-token-case
              ("[gimosx]*"
-              (list pcre (match-string-no-properties 0))))))))))
+              (rxt--add-flags pcre (match-string-no-properties 0))))))))))
 
 
 ;;;; Parser constants

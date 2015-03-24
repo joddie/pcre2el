@@ -453,6 +453,42 @@
     (should (equal (get-text-property 13 'display string) "\\t"))))
 
 
+
+;;;; Test PCRE reading
+
+(ert-deftest rxt-read-delimited-pcre ()
+  (cl-flet ((read-pcre-from-string (string)
+              (with-temp-buffer
+                (save-excursion (insert string))
+                (rxt-read-delimited-pcre))))
+    (should (string= (read-pcre-from-string "/[a-z]/")
+                     "[a-z]"))
+    (should (string= (read-pcre-from-string "  m/\\d+/")
+                     "\\d+"))
+    (should (string= (read-pcre-from-string "    qr/embedded\\/delimiters/")
+                     "embedded\\/delimiters"))
+    (should (string= (read-pcre-from-string
+                      "    s/several\\/embedded\\/delimiters/replacement/")
+                     "several\\/embedded\\/delimiters"))
+    (should (string= (read-pcre-from-string
+                      "    s/several\\/embedded\\/delimiters/replacement\\/with\\/delimiters/")
+                     "several\\/embedded\\/delimiters"))
+
+    (let ((pcre (read-pcre-from-string "/regexp/")))
+      (should (string= pcre "regexp"))
+      (should (string= (rxt--flags pcre) "")))
+
+    (let ((pcre (read-pcre-from-string "m/regexp/s")))
+      (should (string= pcre "regexp"))
+      (should (string= (rxt--flags pcre) "s")))
+
+    (let ((pcre (read-pcre-from-string "s/regexp/replacement/sx")))
+      (should (string= pcre "regexp"))
+      (should (string= (rxt--flags pcre) "sx")))
+
+    (let ((pcre (read-pcre-from-string "s/regexp/embedded\\/delimiters/x")))
+      (should (string= pcre "regexp"))
+      (should (string= (rxt--flags pcre) "x")))))
 
 
 ;; The following tests are adapted from the first set of tests
