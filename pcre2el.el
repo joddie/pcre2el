@@ -1801,7 +1801,7 @@ Returns `nil' if none of the CASES matches."
                     (goto-char (match-end 0))
                     ,@action)))))
 
-(defmacro rxt-syntax-tree-value (&rest body)
+(defmacro rxt-with-source-location (&rest body)
   "Evaluate BODY and record source location information on its value. 
 
 BODY may evaluate to any kind of object, but its value should
@@ -1988,7 +1988,7 @@ otherwise it would not match.")
   ;; These variables are let-bound here because in PCRE mode they may
   ;; be set internally by (?x) or (?s) constructions, whose scope
   ;; lasts until the end of a sub-expression
-  (rxt-syntax-tree-value
+  (rxt-with-source-location
    (let ((rxt-pcre-extended-mode rxt-pcre-extended-mode)
          (rxt-pcre-s-mode rxt-pcre-s-mode)
          (rxt-pcre-case-fold rxt-pcre-case-fold))
@@ -2014,7 +2014,7 @@ otherwise it would not match.")
 ;; Parse a regexp "branch": a sequence of pieces
 (defun rxt-parse-branch ()
   (rxt-extended-skip)
-  (rxt-syntax-tree-value
+  (rxt-with-source-location
    (let ((pieces '())
          (branch-start-p t))
      (while (not (looking-at rxt-branch-end-regexp))
@@ -2026,7 +2026,7 @@ otherwise it would not match.")
 ;; following quantifiers
 (defun rxt-parse-piece (&optional branch-begin)
   (rxt-extended-skip)
-  (rxt-syntax-tree-value
+  (rxt-with-source-location
    (let ((atom (rxt-parse-atom branch-begin)))
      (rxt-parse-quantifiers atom))))
 
@@ -2077,7 +2077,7 @@ otherwise it would not match.")
    ((rx "\\B") (rxt-not-word-boundary))))
 
 (defun rxt-parse-atom/el (branch-begin)
-  (rxt-syntax-tree-value
+  (rxt-with-source-location
    (or (rxt-parse-atom/common)
        (rxt-token-case
         ;; "." wildcard
@@ -2138,7 +2138,7 @@ otherwise it would not match.")
 
 (defun rxt-parse-atom/pcre ()
   (rxt-extended-skip)
-  (rxt-syntax-tree-value
+  (rxt-with-source-location
    (or
     ;; Is it an atom that's the same in Elisp?
     (rxt-parse-atom/common)
@@ -2335,7 +2335,7 @@ in character classes as outside them."
   (when (eobp)
     (rxt-error "Missing close right bracket in regexp"))
 
-  (rxt-syntax-tree-value
+  (rxt-with-source-location
    (let* ((negated (rxt-token-case
                     ("\\^" t)
                     (t nil)))

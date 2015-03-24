@@ -120,7 +120,7 @@
     (should (string= (rxt-location-text location-1) "mmy"))
     (should (string= (rxt-location-text location-2) "dumm"))))
 
-(ert-deftest rxt-syntax-tree-value ()
+(ert-deftest rxt-with-source-location ()
   "Test recording of source location information"
   (let ((string "dummy string") 
         (dummy-1 (cl-gensym))
@@ -131,7 +131,7 @@
         (insert rxt-source-text-string)
         (goto-char (point-min))
         (setq value-1
-              (rxt-syntax-tree-value
+              (rxt-with-source-location
                (goto-char (point-max))
                dummy-1)))
 
@@ -139,7 +139,7 @@
         (insert rxt-source-text-string)
         (goto-char (point-min))
         (setq value-2
-              (rxt-syntax-tree-value
+              (rxt-with-source-location
                (forward-word)
                dummy-2))))
     
