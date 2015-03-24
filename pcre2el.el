@@ -2487,42 +2487,39 @@ in character classes as outside them."
                           collect `(any ,(upcase char) ,(downcase char))))))
 
           ((rxt-seq-p re)
-           (cons (rxt-rx-symbol 'seq)
-                 (mapcar #'rxt-adt->rx (rxt-seq-elts re))))
+           `(seq ,@(mapcar #'rxt-adt->rx (rxt-seq-elts re))))
 
           ((rxt-choice-p re)
-           (cons (rxt-rx-symbol 'or)
-                 (mapcar #'rxt-adt->rx (rxt-choice-elts re))))
+           `(or ,@(mapcar #'rxt-adt->rx (rxt-choice-elts re))))
 
           ((rxt-submatch-p re)
            (if (rxt-seq-p (rxt-submatch-body re))
-               (cons (rxt-rx-symbol 'submatch)
-                     (mapcar #'rxt-adt->rx (rxt-seq-elts (rxt-submatch-body re))))
-             (list (rxt-rx-symbol 'submatch)
-                   (rxt-adt->rx (rxt-submatch-body re)))))
+               `(submatch
+                 ,@(mapcar #'rxt-adt->rx (rxt-seq-elts (rxt-submatch-body re))))
+             `(submatch ,(rxt-adt->rx (rxt-submatch-body re)))))
 
           ((rxt-submatch-numbered-p re)
            (if (rxt-seq-p (rxt-submatch-numbered-p re))
-               (cl-list* (rxt-rx-symbol 'submatch-n)
-                         (rxt-submatch-numbered-n re)
-                         (mapcar #'rxt-adt->rx
-                                 (rxt-seq-elts
-                                  (rxt-submatch-numbered-body re))))
-             (list (rxt-rx-symbol 'submatch-n)
-                   (rxt-submatch-numbered-n re)
-                   (rxt-adt->rx (rxt-submatch-numbered-body re)))))
+               `(,(rxt-rx-symbol 'submatch-n)
+                  ,(rxt-submatch-numbered-n re)
+                  ,@(mapcar #'rxt-adt->rx
+                            (rxt-seq-elts
+                             (rxt-submatch-numbered-body re))))
+             `(,(rxt-rx-symbol 'submatch-n)
+                ,(rxt-submatch-numbered-n re)
+                ,(rxt-adt->rx (rxt-submatch-numbered-body re)))))
 
           ((rxt-backref-p re)
            (let ((n (rxt-backref-n re)))
              (if (<= n 9)
-                 (list 'backref (rxt-backref-n re))
+                 `(backref ,(rxt-backref-n re))
                (rxt-error "Too many backreferences (%s)" n))))
 
           ((rxt-syntax-class-p re)
-           (list 'syntax (rxt-syntax-class-symbol re)))
+           `(syntax ,(rxt-syntax-class-symbol re)))
 
           ((rxt-char-category-p re)
-           (list 'category (rxt-char-category-symbol re)))
+           `(category ,(rxt-char-category-symbol re)))
 
           ((rxt-repeat-p re)
            (let ((from (rxt-repeat-from re))
@@ -2551,16 +2548,17 @@ in character classes as outside them."
                      `(minimal-match ,rx)))
                (cond
                 ((and (zerop from) (null to))
-                 (list (if greedy '* '*?) body))
+                 `(,(if greedy '* '*?) ,body))
                 ((and (equal from 1) (null to))
-                 (list (if greedy '+ '+?) body))
+                 `(,(if greedy '+ '+?) ,body))
                 ((and (zerop from) (equal to 1))
-                 (list (if greedy '\? '\??) body))
-                ((null to) (list '>= from body))
+                 `(,(if greedy '\? '\??) ,body))
+                ((null to)
+                 `(>= ,from ,body))
                 ((equal from to)
-                 (list '= from body))
+                 `(= ,from ,body))
                 (t
-                 (list '** from to body))))))
+                 `(** ,from ,to ,body))))))
 
           ((rxt-char-set-union-p re)
            (let ((chars (rxt-char-set-union-chars re))
@@ -2590,7 +2588,7 @@ in character classes as outside them."
                  ,@classes))))
 
           ((rxt-char-set-negation-p re)
-           (list 'not (rxt-adt->rx (rxt-char-set-negation-elt re))))
+           `(not ,(rxt-adt->rx (rxt-char-set-negation-elt re))))
 
           (t
            (rxt-error "No RX translation for %s" re)))))
