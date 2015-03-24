@@ -2238,9 +2238,9 @@ in character classes as outside them."
 (defun rxt-parse-subgroup/pcre ()
   (catch 'return
     (let ((shy nil)
-          (x rxt-pcre-extended-mode)
-          (s rxt-pcre-s-mode)
-          (i rxt-pcre-case-fold)
+          (extended-mode rxt-pcre-extended-mode)
+          (single-line-mode rxt-pcre-s-mode)
+          (case-fold rxt-pcre-case-fold)
           (subgroup-begin (1- (point))))
       (rxt-extended-skip)
       ;; Check for special (? ..) and (* ...) syntax
@@ -2257,19 +2257,19 @@ in character classes as outside them."
           (let ((begin (match-beginning 0))
                 (on (or (match-string 1) (match-string 3)))
                 (off (or (match-string 2) "")))
-            (if (cl-find ?x on)  (setq x t))
-            (if (cl-find ?s on)  (setq s t))
-            (if (cl-find ?i on)  (setq i t))
-            (if (cl-find ?x off) (setq x nil))
-            (if (cl-find ?s off) (setq s nil))
-            (if (cl-find ?i off) (setq i nil)))
+            (if (cl-find ?x on)  (setq extended-mode t))
+            (if (cl-find ?s on)  (setq single-line-mode t))
+            (if (cl-find ?i on)  (setq case-fold t))
+            (if (cl-find ?x off) (setq extended-mode nil))
+            (if (cl-find ?s off) (setq single-line-mode nil))
+            (if (cl-find ?i off) (setq case-fold nil)))
           (rxt-token-case
            (":" (setq shy t))        ; Shy group with flags (?isx-isx: ...
            (")"                      ; Set flags (?isx-isx)
             ;; Set flags for the remainder of the current subexpression
-            (setq rxt-pcre-extended-mode x
-                  rxt-pcre-s-mode s
-                  rxt-pcre-case-fold i)
+            (setq rxt-pcre-extended-mode extended-mode
+                  rxt-pcre-s-mode single-line-mode
+                  rxt-pcre-case-fold case-fold)
             (throw 'return (rxt-empty-string)))))
          ;; Other constructions like (?=, (?!, etc. are not recognised
          (t (rxt-error "Unrecognized PCRE extended construction (?%c"
@@ -2284,9 +2284,9 @@ in character classes as outside them."
 
       ;; Parse the remainder of the subgroup
       (unless shy (cl-incf rxt-subgroup-count))
-      (let* ((rxt-pcre-extended-mode x)
-             (rxt-pcre-s-mode s)
-             (rxt-pcre-case-fold i)
+      (let* ((rxt-pcre-extended-mode extended-mode)
+             (rxt-pcre-s-mode single-line-mode)
+             (rxt-pcre-case-fold case-fold)
              (rx (rxt-parse-exp)))
         (rxt-extended-skip)
         (rxt-token-case
