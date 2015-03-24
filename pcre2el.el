@@ -2472,11 +2472,11 @@ in character classes as outside them."
 
 (defun rxt-adt->rx (re)
   (let ((rx
-         (cond
-          ((rxt-primitive-p re)
+         (cl-typecase re
+          (rxt-primitive
            (rxt-rx-symbol (rxt-primitive-rx re)))
 
-          ((rxt-string-p re)
+          (rxt-string
            (if (or (not (rxt-string-case-fold re))
                    (string= "" (rxt-string-chars re)))
                (rxt-string-chars re)
@@ -2484,19 +2484,19 @@ in character classes as outside them."
                ,@(cl-loop for char across (rxt-string-chars re)
                           collect `(any ,(upcase char) ,(downcase char))))))
 
-          ((rxt-seq-p re)
+          (rxt-seq
            `(seq ,@(mapcar #'rxt-adt->rx (rxt-seq-elts re))))
 
-          ((rxt-choice-p re)
+          (rxt-choice
            `(or ,@(mapcar #'rxt-adt->rx (rxt-choice-elts re))))
 
-          ((rxt-submatch-p re)
+          (rxt-submatch
            (if (rxt-seq-p (rxt-submatch-body re))
                `(submatch
                  ,@(mapcar #'rxt-adt->rx (rxt-seq-elts (rxt-submatch-body re))))
              `(submatch ,(rxt-adt->rx (rxt-submatch-body re)))))
 
-          ((rxt-submatch-numbered-p re)
+          (rxt-submatch-numbered
            (if (rxt-seq-p (rxt-submatch-numbered-p re))
                `(,(rxt-rx-symbol 'submatch-n)
                   ,(rxt-submatch-numbered-n re)
@@ -2507,19 +2507,19 @@ in character classes as outside them."
                 ,(rxt-submatch-numbered-n re)
                 ,(rxt-adt->rx (rxt-submatch-numbered-body re)))))
 
-          ((rxt-backref-p re)
+          (rxt-backref
            (let ((n (rxt-backref-n re)))
              (if (<= n 9)
                  `(backref ,(rxt-backref-n re))
                (rxt-error "Too many backreferences (%s)" n))))
 
-          ((rxt-syntax-class-p re)
+          (rxt-syntax-class
            `(syntax ,(rxt-syntax-class-symbol re)))
 
-          ((rxt-char-category-p re)
+          (rxt-char-category
            `(category ,(rxt-char-category-symbol re)))
 
-          ((rxt-repeat-p re)
+          (rxt-repeat
            (let ((from (rxt-repeat-from re))
                  (to (rxt-repeat-to re))
                  (greedy (rxt-repeat-greedy re))
@@ -2527,38 +2527,38 @@ in character classes as outside them."
              (if rxt-verbose-rx-translation
                  (let ((rx
                         (cond
-                         ((and (zerop from) (null to))
-                          `(zero-or-more ,body))
-                         ((and (equal from 1) (null to))
-                          `(one-or-more ,body))
-                         ((and (zerop from) (equal to 1))
-                          `(zero-or-one ,body))
-                         ((null to)
-                          `(>= ,from ,body))
-                         ((equal from to)
-                          `(repeat ,from ,body))
-                         (t
-                          `(** ,from ,to ,body)))))
+                          ((and (zerop from) (null to))
+                           `(zero-or-more ,body))
+                          ((and (equal from 1) (null to))
+                           `(one-or-more ,body))
+                          ((and (zerop from) (equal to 1))
+                           `(zero-or-one ,body))
+                          ((null to)
+                           `(>= ,from ,body))
+                          ((equal from to)
+                           `(repeat ,from ,body))
+                          (t
+                           `(** ,from ,to ,body)))))
                    (if greedy
                        (if rxt-explain
                            rx           ; Readable but not strictly accurate. Fixme?
                          `(maximal-match ,rx))
                      `(minimal-match ,rx)))
                (cond
-                ((and (zerop from) (null to))
-                 `(,(if greedy '* '*?) ,body))
-                ((and (equal from 1) (null to))
-                 `(,(if greedy '+ '+?) ,body))
-                ((and (zerop from) (equal to 1))
-                 `(,(if greedy '\? '\??) ,body))
-                ((null to)
-                 `(>= ,from ,body))
-                ((equal from to)
-                 `(= ,from ,body))
-                (t
-                 `(** ,from ,to ,body))))))
+                 ((and (zerop from) (null to))
+                  `(,(if greedy '* '*?) ,body))
+                 ((and (equal from 1) (null to))
+                  `(,(if greedy '+ '+?) ,body))
+                 ((and (zerop from) (equal to 1))
+                  `(,(if greedy '\? '\??) ,body))
+                 ((null to)
+                  `(>= ,from ,body))
+                 ((equal from to)
+                  `(= ,from ,body))
+                 (t
+                  `(** ,from ,to ,body))))))
 
-          ((rxt-char-set-union-p re)
+          (rxt-char-set-union
            (let ((chars (rxt-char-set-union-chars re))
                  (ranges (rxt-char-set-union-ranges re))
                  (classes (rxt-char-set-union-classes re))
@@ -2585,7 +2585,7 @@ in character classes as outside them."
 
                  ,@classes))))
 
-          ((rxt-char-set-negation-p re)
+          (rxt-char-set-negation
            `(not ,(rxt-adt->rx (rxt-char-set-negation-elt re))))
 
           (t
