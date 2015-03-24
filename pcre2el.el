@@ -488,39 +488,47 @@ these commands only."
 
 ;;;; Macros and functions for writing interactive input and output
 
-;; Macro for returning values. If called interactively, display the
-;; value in the echo area and copy it to the kill ring; otherwise just
-;; return the value. TYPE controls what to copy to the kill ring. If
-;; it is `pcre', copy the result as a string for yanking into Perl
-;; code, JS code, etc. If `sexp', copy the result as a `read'-able
-;; literal. If type is `emacs', copy both the string value (for use in
-;; interactive commands) and a readable string literal (for yanking
-;; into source buffers.
-(defmacro rxt-value (type expr)
-  (let ((val (make-symbol "val")))
-    `(let ((,val ,expr))
+;; Macros for handling return values.  If called interactively,
+;; display the value in the echo area and copy it to the kill ring,
+;; otherwise just return the value.  PCREs are copied as unquoted
+;; strings for yanking into Perl, JS, etc.  `rx' forms and other sexps
+;; are copied as `read'-able literals for yanking into Elisp buffers.
+;; Emacs regexps are copied twice: once as an unquoted value for
+;; interactive use, and once as a readable string literal for yanking
+;; into Elisp buffers.
+(defmacro rxt-return-pcre (expr)
+  (let ((value (make-symbol "value")))
+    `(let ((,value ,expr))
        (when (called-interactively-p 'any)
-         ,(cl-ecase type
-            (sexp `(rxt--kill-sexp-value ,val))
-            (pcre `(rxt--kill-pcre-value ,val))
-            (emacs `(rxt--kill-lisp-value ,val))))
-       ,val)))
+         (rxt--kill-pcre ,value))
+       ,value)))
 
-(defun rxt--kill-sexp-value (value)
+(defmacro rxt-return-sexp (expr)
+  (let ((value (make-symbol "value")))
+    `(let ((,value ,expr))
+       (when (called-interactively-p 'any)
+         (rxt--kill-sexp ,value))
+       ,value)))
+
+(defmacro rxt-return-emacs-regexp (expr)
+  (let ((value (make-symbol "value")))
+    `(let ((,value ,expr))
+       (when (called-interactively-p 'any)
+         (rxt--kill-emacs-regexp ,value))
+       ,value)))
+
+(defun rxt--kill-sexp (value)
   (let ((lisp-literal (prin1-to-string value)))
-    (message "Copied %s to kill-ring"
-             (propertize lisp-literal 'face 'font-lock-string-face))
+    (message "%s" lisp-literal)
     (kill-new lisp-literal)))
 
-(defun rxt--kill-pcre-value (value)
-  (message "Copied PCRE %s to kill-ring"
-           (propertize value 'face 'font-lock-string-face))
+(defun rxt--kill-pcre (value)
+  (message "%s" value)
   (kill-new value))
 
-(defun rxt--kill-lisp-value (value)
+(defun rxt--kill-emacs-regexp (value)
   (let ((lisp-literal (prin1-to-string value)))
-    (message "Copied Emacs %s + string literal to kill-ring"
-             (propertize value 'face 'font-lock-string-face))
+    (message "%s" value)
     (kill-new lisp-literal)
     (kill-new value)))
 
@@ -912,7 +920,7 @@ it to the kill ring.
 Emacs regexp features such as syntax classes which cannot be
 translated to PCRE will cause an error."
   (interactive (rxt-interactive/elisp))
-  (rxt-value pcre (rxt-adt->pcre (rxt-parse-elisp regexp))))
+  (rxt-return-pcre (rxt-adt->pcre (rxt-parse-elisp regexp))))
 
 ;;;###autoload
 (defun rxt-elisp-to-rx (regexp)
@@ -922,7 +930,7 @@ See `rxt-elisp-to-pcre' for a description of the interactive
 behavior and `rx' for documentation of the S-expression based
 regexp syntax."
   (interactive (rxt-interactive/elisp))
-  (rxt-value sexp (rxt-adt->rx (rxt-parse-elisp regexp))))
+  (rxt-return-sexp (rxt-adt->rx (rxt-parse-elisp regexp))))
 
 ;;;###autoload
 (defun rxt-elisp-to-sre (regexp)
@@ -937,7 +945,7 @@ http://www.scsh.net/docu/post/sre.html.
 Emacs regexp features, including backreferences, which cannot be
 translated to SRE will cause an error."
   (interactive (rxt-interactive/elisp))
-  (rxt-value sexp (rxt-adt->sre (rxt-parse-elisp regexp))))
+  (rxt-return-sexp (rxt-adt->sre (rxt-parse-elisp regexp))))
 
 ;;;###autoload
 (defun rxt-elisp-to-strings (regexp)
@@ -952,7 +960,7 @@ on).
 
 Throws an error if REGEXP contains any infinite quantifiers."
   (interactive (rxt-interactive/elisp))
-  (rxt-value sexp (rxt-adt->strings (rxt-parse-elisp regexp))))
+  (rxt-return-sexp (rxt-adt->strings (rxt-parse-elisp regexp))))
 
 ;;;###autoload
 (defun rxt-toggle-elisp-rx ()
@@ -1017,10 +1025,10 @@ PCRE regexp features that cannot be translated into Emacs syntax
 will cause an error. See the commentary section of pcre2el.el for
 more details."
   (interactive (rxt-interactive/pcre))
-  (rxt-value emacs
-             (rx-to-string
-              (rxt-pcre-to-rx (rxt--add-flags pcre flags))
-              t)))
+  (rxt-return-emacs-regexp
+   (rx-to-string
+    (rxt-pcre-to-rx (rxt--add-flags pcre flags))
+    t)))
 
 ;;;###autoload
 (defalias 'pcre-to-elisp 'rxt-pcre-to-elisp)
@@ -1031,7 +1039,7 @@ more details."
 
 See `rxt-pcre-to-elisp' for a description of the interactive behavior."
   (interactive (rxt-interactive/pcre))
-  (rxt-value sexp (rxt-adt->rx (rxt-parse-pcre (rxt--add-flags pcre flags)))))
+  (rxt-return-sexp (rxt-adt->rx (rxt-parse-pcre (rxt--add-flags pcre flags)))))
 
 ;;;###autoload
 (defun rxt-pcre-to-sre (pcre &optional flags)
@@ -1041,7 +1049,7 @@ See `rxt-pcre-to-elisp' for a description of the interactive
 behavior and `rxt-elisp-to-sre' for information about the SRE
 S-expression format."
   (interactive (rxt-interactive/pcre))
-  (rxt-value sexp (rxt-adt->sre (rxt-parse-pcre (rxt--add-flags pcre flags)))))
+  (rxt-return-sexp (rxt-adt->sre (rxt-parse-pcre (rxt--add-flags pcre flags)))))
 
 ;;;###autoload
 (defun rxt-pcre-to-strings (pcre &optional flags)
@@ -1052,7 +1060,7 @@ behavior and `rxt-elisp-to-strings' for why this might be useful.
 
 Throws an error if PCRE contains any infinite quantifiers."
   (interactive (rxt-interactive/pcre))
-  (rxt-value sexp (rxt-adt->strings (rxt-parse-pcre (rxt--add-flags pcre flags)))))
+  (rxt-return-sexp (rxt-adt->strings (rxt-parse-pcre (rxt--add-flags pcre flags)))))
 
 (defun rxt--flags (pcre)
   (get-text-property 0 'rxt-pcre-flags pcre))
