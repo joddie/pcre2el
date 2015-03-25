@@ -1465,7 +1465,7 @@ the kill ring; see the two functions named above for details."
                                  :end    (rxt-location-end last))))
       result)))
 
-;;; Choice
+;;; Choice (alternation/union)
 (cl-defstruct
     (rxt-choice
      (:constructor make-rxt-choice (elts))
@@ -1480,58 +1480,98 @@ the kill ring; see the two functions named above for details."
         (null (rxt-choice-elts re)))
    (rxt-empty-char-set-p re)))
 
-;; Slightly smart choice constructor:
-;; -- flattens nested choices
-;; -- drops never-matching (empty) REs
-;; -- folds character sets and single-char strings together
-;; -- singleton choice reduced to the element itself
-(defun rxt-choice (res)
-  (let ((res (rxt-choice-flatten res)))
-    (if (consp res)
-        (if (consp (cdr res))
-            (make-rxt-choice res) ; General case
-          (car res))              ; Singleton choice
-      rxt-empty)))
+(defun rxt-choice (alternatives)
+  "Simplify a set of regexp alternatives.
 
-;; Flatten any nested rxt-choices amongst RES, and collect any
-;; charsets together
-(defun rxt-choice-flatten (res)
-  (cl-destructuring-bind (res cset)
-      (rxt-choice-flatten+char-set res)
-    (if (not (rxt-empty-p cset))
-        (cons cset res)
-      res)))
+ALTERNATIVES should be a list of `rxt-syntax-tree' objects to be
+combined into an `rxt-choice' structure.  The resulting
+`rxt-choice' object represents a choice among ALTERNATIVES, which
+are simplified in the following ways:
 
-;; Does the real work for the above. Returns two values: a flat list
-;; of elements (with any rxt-choices reduced to their contents), and a
-;; char-set union that collects together all the charsets and
-;; single-char strings
-(defun rxt-choice-flatten+char-set (res)
-  (if (null res)
-      (list '() (make-rxt-char-set-union))
-    (let* ((re (car res)))
-      (cl-destructuring-bind (tail cset)
-          (rxt-choice-flatten+char-set (cdr res))
+- If ALTERNATIVES contains only one element, it is returned unchanged.
+
+- All existing `rxt-choice' elements in ALTERNATIVES are replaced
+  by a flat list of their subexpressions: symbolically,
+  a|(b|(c|d)) is replaced by a|b|c|d
+
+- All character sets and single-character strings in ALTERNATIVES
+  are combined together into one or two character sets,
+  respecting case-folding behaviour."
+  (cl-destructuring-bind (other-elements char-set case-fold-char-set)
+      (rxt--simplify-alternatives alternatives)
+    (let ((simplified-alternatives
+           (append (if (not (rxt-empty-p char-set))
+                       (list char-set)
+                     '())
+                   (if (not (rxt-empty-p case-fold-char-set))
+                       (list case-fold-char-set)
+                     '())
+                   other-elements)))
+      (pcase simplified-alternatives
+        (`()
+          rxt-empty)
+        (`(,element)
+          element)
+        (_
+         (make-rxt-choice simplified-alternatives))))))
+
+
+(defun rxt--simplify-alternatives (alternatives)
+  "Simplify a set of regexp alternatives.
+
+ALTERNATIVES should be a list of `rxt-syntax-tree' objects to be combined
+into an `rxt-choice' structure.  The result is a three-element
+list (OTHER-ELEMENTS CHAR-SET CASE-FOLDED-CHAR-SET):
+
+- CHAR-SET is an `rxt-char-set-union' containing the union of all
+  case-sensitive character sets and single-character strings in
+  RES.
+
+- CASE-FOLDED-CHAR-SET is similar but combines all the
+  case-insensitive character sets and single-character strings.
+
+- OTHER-ELEMENTS is a list of all other elements, with all
+  `rxt-choice' structures replaced by a flat list of their
+  component subexpressions."
+  (if (null alternatives)
+      (list '()
+            (make-rxt-char-set-union :case-fold nil)
+            (make-rxt-char-set-union :case-fold t))
+    (let* ((re (car alternatives)))
+      (cl-destructuring-bind (tail char-set case-fold-char-set)
+          (rxt--simplify-alternatives (cdr alternatives))
         (cond ((rxt-choice-p re)         ; Flatten nested choices
                (list
                 (append (rxt-choice-elts re) tail)
-                cset))
+                char-set
+                case-fold-char-set))
 
               ((rxt-empty-p re)          ; Drop empty re's.
-               (list tail cset))
+               (list tail char-set case-fold-char-set))
 
               ((rxt-char-set-union-p re) ; Fold char sets together
-               (list tail
-                     (rxt-char-set-adjoin! cset re)))
+               (if (rxt-char-set-union-case-fold re)
+                   (list tail
+                         char-set
+                         (rxt-char-set-adjoin! case-fold-char-set re))
+                 (list tail
+                       (rxt-char-set-adjoin! char-set re)
+                       case-fold-char-set)))
 
               ((and (rxt-string-p re)    ; Same for 1-char strings
                     (= 1 (length (rxt-string-chars re))))
-               (list tail
-                     (rxt-char-set-adjoin! cset
-                                           (rxt-string-chars re))))
+               (if (rxt-string-case-fold re)
+                   (list tail
+                         char-set
+                         (rxt-char-set-adjoin! case-fold-char-set
+                                               (rxt-string-chars re)))
+                 (list tail
+                       (rxt-char-set-adjoin! char-set
+                                             (rxt-string-chars re))
+                       case-fold-char-set)))
 
               (t                         ; Otherwise.
-               (list (cons re tail) cset)))))))
+               (list (cons re tail) char-set case-fold-char-set)))))))
 
 ;;; Repetition
 (cl-defstruct (rxt-repeat
@@ -1693,6 +1733,94 @@ modified."
     (rxt-error "Can't adjoin non-rxt-char-set, character, range or symbol %S" item)))
   cset)
 
+(defun rxt--all-char-set-union-chars (char-set)
+  "Return a list of all characters in CHAR-SET."
+  (cl-assert (rxt-char-set-union-p char-set))
+  (append
+   (rxt-char-set-union-chars char-set)
+   (cl-loop for (start . end) in (rxt-char-set-union-ranges char-set)
+            nconc (cl-loop for char from start to end collect char))))
+
+(defun rxt--simplify-char-set (char-set &optional case-fold-p)
+  "Return a minimal char-set to match the same characters as CHAR-SET.
+
+With optional argument CASE-FOLD-P, return a char-set which
+emulates case-folding behaviour by including both uppercase and
+lowercase versions of all characters in CHAR-SET."
+  (cl-assert (rxt-char-set-union-p char-set))
+  (let* ((classes (rxt-char-set-union-classes char-set))
+         (all-chars
+          (if case-fold-p
+              (cl-loop for char in (rxt--all-char-set-union-chars char-set)
+                       nconc (list (upcase char) (downcase char)))
+            (rxt--all-char-set-union-chars char-set)))
+         (all-ranges
+          (rxt--extract-ranges (rxt--remove-redundant-chars all-chars classes))))
+    (let ((singletons nil)
+          (ranges nil))
+      (cl-loop for (start . end) in all-ranges
+               do
+               (cond ((= start end) (push start singletons))
+                     ((= (1+ start) end)
+                      (push start singletons)
+                      (push end singletons))
+                     (t (push (cons start end) ranges))))
+      (make-rxt-char-set-union :chars (nreverse singletons)
+                               :ranges (nreverse ranges)
+                               :classes classes))))
+
+(defun rxt--remove-redundant-chars (chars classes)
+  "Remove all characters which match a character class in CLASSES from CHARS."
+  (if (null classes)
+      chars
+    (string-to-list
+     (replace-regexp-in-string
+      (rx-to-string `(any ,@classes))
+      ""
+      (apply #'string chars)))))
+
+(defun rxt--extract-ranges (chars)
+  "Return a list of all contiguous ranges in CHARS.
+
+CHARS should be a list of characters (integers).  The return
+value is a list of conses (START . END) representing ranges, such
+that the union of all the ranges represents the same of
+characters as CHARS.
+
+Example:
+    (rxt--extract-ranges (list ?a ?b ?c ?q ?x ?y ?z))
+        => ((?a . ?c) (?q . ?q) (?x . ?z))"
+  (let ((array
+         (apply #'vector
+                (cl-remove-duplicates
+                 (sort (copy-sequence chars) #'<)))))
+    (cl-labels
+        ((recur (start end)
+           (if (< end start)
+               nil
+             (let ((min (aref array start))
+                   (max (aref array end)))
+               (if (= (- max min) (- end start))
+                   (list (cons min max))
+                 (let* ((split-point (/ (+ start end) 2))
+                        (left (recur start split-point))
+                        (right (recur (1+ split-point) end)))
+                   (merge left right))))))
+         (merge (left right)
+           (cond ((null left) right)
+                 ((null right) left)
+                 (t
+                  (let ((last-left (car (last left)))
+                        (first-right (car right)))
+                    (if (= (1+ (cdr last-left))
+                           (car first-right))
+                        (append (cl-subseq left 0 -1)
+                                (list
+                                 (cons (car last-left)
+                                       (cdr first-right)))
+                                (cl-subseq right 1))
+                      (append left right)))))))
+      (recur 0 (1- (length array))))))
 
 ;;; Set complement of character set, syntax class, or character
 ;;; category
@@ -2558,31 +2686,15 @@ in character classes as outside them."
                   `(** ,from ,to ,body))))))
 
           (rxt-char-set-union
-           (let ((chars (rxt-char-set-union-chars re))
-                 (ranges (rxt-char-set-union-ranges re))
-                 (classes (rxt-char-set-union-classes re))
-                 (case-fold (rxt-char-set-union-case-fold re)))
-             (if (and (null chars)
-                      (null ranges)
-                      (= 1 (length classes)))
+           (let* ((case-fold (rxt-char-set-union-case-fold re))
+                  (re (rxt--simplify-char-set re case-fold))
+                  (chars (rxt-char-set-union-chars re))
+                  (ranges (rxt-char-set-union-ranges re))
+                  (classes (rxt-char-set-union-classes re))
+                  (case-fold (rxt-char-set-union-case-fold re)))
+             (if (and (null chars) (null ranges) (= 1 (length classes)))
                  (car classes)
-               `(any
-                 ,@(when chars
-                         (apply #'string
-                                (if case-fold
-                                    (cl-loop for char in chars
-                                             nconc (list (upcase char)
-                                                         (downcase char)))
-                                  chars)))
-
-                 ,@(if case-fold
-                       (cl-loop for (begin . end) in ranges
-                                nconc
-                                (list (cons begin end)
-                                      (cons (upcase begin) (upcase end))))
-                       ranges)
-
-                 ,@classes))))
+               `(any ,@chars ,@ranges ,@classes))))
 
           (rxt-char-set-negation
            `(not ,(rxt-adt->rx (rxt-char-set-negation-elt re))))

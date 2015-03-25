@@ -255,12 +255,181 @@
     (should (equal sequence-1 sequence-2))))
 
 ;;; Choice constructor
+(ert-deftest rxt-choice ()
+  ;; Singleton elements should be returned unchanged
+  (let ((element (rxt-string "example")))
+    (should (equal (rxt-choice (list element)) element)))
 
-;; FIXME
+  ;; Nested choices should be flattened
+  (should (equal (rxt-choice
+                  (list
+                   (rxt-choice
+                    (list
+                     (rxt-string "first")
+                     (rxt-string "second")))
+                   (rxt-string "third")))
+                 (rxt-choice
+                  (list
+                   (rxt-string "first")
+                   (rxt-string "second")
+                   (rxt-string "third")))))
+
+  ;; Char sets with the same case-folding behaviour should be folded together
+  (let* ((char-set-1
+          (make-rxt-char-set-union :chars '(?a ?b ?c)))
+         (char-set-2
+          (make-rxt-char-set-union :chars '(?1 ?2 ?3)))
+         (choice
+          (rxt-choice (list char-set-1 char-set-2))))
+    (should (rxt-char-set-union-p choice))
+    (should
+     (rxt--char-set-equal
+      choice
+      (make-rxt-char-set-union :chars '(?a ?b ?c ?1 ?2 ?3)))))
+
+  ;; Char-sets with different case-folding behaviour should NOT be
+  ;; folded together
+  (let* ((char-set-1
+          (make-rxt-char-set-union :chars '(?a ?b ?c)
+                                   :case-fold nil))
+         (char-set-2
+          (make-rxt-char-set-union :chars '(?1 ?2 ?3)
+                                   :case-fold t))
+         (choice
+          (rxt-choice (list char-set-1 char-set-2))))
+    (should (rxt-choice-p choice))))
 
 ;;; Repeat
 
 ;; FIXME
+
+;;; Character sets and case-folding
+(defun rxt--set-equal (a b)
+  (null (cl-set-exclusive-or a b :test 'equal)))
+
+(defun rxt--char-set-equal (a b)
+  (and (rxt--set-equal (rxt-char-set-union-chars a)
+                       (rxt-char-set-union-chars b))
+       (rxt--set-equal (rxt-char-set-union-ranges a)
+                       (rxt-char-set-union-ranges b))
+       (rxt--set-equal (rxt-char-set-union-classes a)
+                       (rxt-char-set-union-classes b))))
+
+(ert-deftest rxt--all-char-set-union-chars ()
+  (should
+   (rxt--set-equal
+    (rxt--all-char-set-union-chars
+     (make-rxt-char-set-union :chars '(?a ?x ?t)))
+    '(?a ?x ?t)))
+
+  (should
+   (rxt--set-equal
+    (rxt--all-char-set-union-chars
+     (make-rxt-char-set-union :chars '(?a ?x ?t)
+                              :ranges '((?0 . ?3) (?d . ?f))))
+    '(?a ?x ?t ?0 ?1 ?2 ?3 ?d ?e ?f))))
+
+(ert-deftest rxt--remove-redundant-chars ()
+  (should
+   (rxt--set-equal (rxt--remove-redundant-chars '(?a ?q ?t ?\n) nil)
+                   '(?a ?q ?t ?\n)))
+
+  (should
+   (rxt--set-equal (rxt--remove-redundant-chars '(?a ?b ?c ?0 ?1 ?2) '(digit))
+                   '(?a ?b ?c)))
+
+  (should
+   (rxt--set-equal (rxt--remove-redundant-chars '(?a ?b ?c ?0 ?1 ?2) '(letter))
+                   '(?0 ?1 ?2)))
+
+  (should
+   (rxt--set-equal (rxt--remove-redundant-chars '(?a ?b ?c ?0 ?1 ?2) '(space))
+                   '(?a ?b ?c ?0 ?1 ?2))))
+
+(ert-deftest rxt--simplify-char-set ()
+  ;; [abcdq-z[:digit:]] is unchanged
+  (let ((char-set
+         (rxt--simplify-char-set
+          (make-rxt-char-set-union :chars '(?a ?b ?c ?d)
+                                   :ranges '((?q . ?z))
+                                   :classes '(digit)
+                                   ))))
+    (should
+     (rxt--char-set-equal char-set
+                          (rxt--simplify-char-set char-set))))
+
+  ;; [abcd0-7[:alnum:]] => [[:alnum:]]
+  (should
+   (rxt--char-set-equal
+    (rxt--simplify-char-set
+     (make-rxt-char-set-union :chars '(?a ?b ?c ?d)
+                              :ranges '((?0 . ?7))
+                              :classes '(alnum)))
+    (make-rxt-char-set-union :classes '(alnum))))
+
+  ;; [abcda-z0-9] => [a-z0-9]
+  (should
+   (rxt--char-set-equal
+    (rxt--simplify-char-set
+     (make-rxt-char-set-union :chars '(?a ?b ?c ?d)
+                              :ranges '((?a . ?z) (?0 . ?9))))
+    (make-rxt-char-set-union :ranges '((?a . ?z) (?0 . ?9)))))
+
+  ;; [g-za-f0-95-9] => [a-z0-9]
+  (should
+   (rxt--char-set-equal
+    (rxt--simplify-char-set
+     (make-rxt-char-set-union :ranges '((?g . ?z) (?a . ?f)
+                                        (?0 . ?9) (?5 . ?9))))
+    (make-rxt-char-set-union :ranges '((?a . ?z) (?0 . ?9)))))
+
+  ;; Two-character ranges are unchanged
+  (let ((char-set (make-rxt-char-set-union :chars '(?a ?b ?8 ?9))))
+    (should
+     (rxt--char-set-equal
+      char-set
+      (rxt--simplify-char-set char-set)))))
+
+(ert-deftest rxt--simplify-char-set-case-fold ()
+  ;; /[[:digit:][:space:]]/i => [[:digit:][:space:]]
+  (let ((char-set (make-rxt-char-set-union :classes '(digit space))))
+    (should (rxt--char-set-equal
+             char-set
+             (rxt--simplify-char-set char-set t))))
+
+  ;; /[ad]/i => [ADad]
+  (should (rxt--char-set-equal
+           (rxt--simplify-char-set (make-rxt-char-set-union :chars '(?a ?d)) t)
+           (make-rxt-char-set-union :chars '(?a ?d ?A ?D))))
+
+  ;; /[abcd]/i => [A-Da-d]
+  (should (rxt--char-set-equal
+           (rxt--simplify-char-set
+            (make-rxt-char-set-union :chars '(?a ?b ?c ?d)) t)
+           (make-rxt-char-set-union :ranges '((?a . ?d) (?A . ?D)))))
+
+  ;; /[W-c]/i => [A-CW-ca-c]
+  (should (rxt--char-set-equal
+           (rxt--simplify-char-set
+            (make-rxt-char-set-union :ranges '((?W . ?c))) t)
+           (make-rxt-char-set-union :ranges '((?W . ?c) (?A . ?C) (?w . ?z))))))
+
+(ert-deftest rxt--extract-ranges ()
+  (should (equal (rxt--extract-ranges '()) '()))
+  (should (equal (rxt--extract-ranges '(1)) '((1 . 1))))
+  (should (equal (rxt--extract-ranges '(1 1)) '((1 . 1))))
+  (should (equal (rxt--extract-ranges '(1 1 1)) '((1 . 1))))
+  (should (equal (rxt--extract-ranges '(1 2)) '((1 . 2))))
+  (should (equal (rxt--extract-ranges '(1 2 3)) '((1 . 3))))
+  (should (equal (rxt--extract-ranges '(1 2 3 4)) '((1 . 4))))
+  (should (equal (rxt--extract-ranges '(1 2 3 4 5)) '((1 . 5))))
+  (should (equal (rxt--extract-ranges '(0 1)) '((0 . 1))))
+  (should (equal (rxt--extract-ranges '(0 0)) '((0 . 0))))
+  (should (equal (rxt--extract-ranges '(0 0 0)) '((0 . 0))))
+  (should (equal (rxt--extract-ranges '(-2 -1 0 1 2 3 4)) '((-2 . 4))))
+  (should (equal (rxt--extract-ranges '(0 3 4 5)) '((0 . 0) (3 . 5))))
+  (should (equal (rxt--extract-ranges '(0 0 0 3 3 4 5 0 3 4 5)) '((0 . 0) (3 . 5))))
+  (should (equal (rxt--extract-ranges '(10 9 8 7 6 5)) '((5 . 10)))))
 
 
 ;;; PCRE parsing tests
@@ -1853,7 +2022,6 @@
 
 
 (ert-deftest rxt-pcre-test-00092 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
@@ -1865,7 +2033,6 @@
 
 
 (ert-deftest rxt-pcre-test-00093 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
@@ -6809,7 +6976,6 @@
 
 
 (ert-deftest rxt-pcre-test-00554 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
