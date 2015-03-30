@@ -2369,6 +2369,8 @@ in character classes as outside them."
       (rxt-token-case
        ((rx "?")                        ; (?
         (rxt-token-case
+         ((rx ")")                      ; Empty group (?)
+          (throw 'return (rxt-empty-string)))
          (":" (setq shy t))             ; Shy group (?:
          ("#"                           ; Comment   (?#
           (search-forward ")")

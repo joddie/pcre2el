@@ -2669,7 +2669,6 @@
 
 
 (ert-deftest rxt-pcre-test-00149 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
