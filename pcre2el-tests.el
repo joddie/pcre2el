@@ -644,20 +644,29 @@
                      "several\\/embedded\\/delimiters"))
 
     (let ((pcre (read-pcre-from-string "/regexp/")))
-      (should (string= pcre "regexp"))
-      (should (string= (rxt--flags pcre) "")))
+      (should (string= pcre "regexp")))
 
     (let ((pcre (read-pcre-from-string "m/regexp/s")))
-      (should (string= pcre "regexp"))
-      (should (string= (rxt--flags pcre) "s")))
+      (should (string= pcre "(?s)regexp")))
 
     (let ((pcre (read-pcre-from-string "s/regexp/replacement/sx")))
-      (should (string= pcre "regexp"))
-      (should (string= (rxt--flags pcre) "sx")))
+      (should (string= pcre "(?sx)regexp")))
 
     (let ((pcre (read-pcre-from-string "s/regexp/embedded\\/delimiters/x")))
-      (should (string= pcre "regexp"))
-      (should (string= (rxt--flags pcre) "x")))))
+      (should (string= pcre "(?x)regexp")))))
+
+;; (ert-deftest rxt--read-pcre ()
+;;   (let* ((unread-command-events
+;;           (string-to-list "regexp text\C-ci\C-cs\C-j"))
+;;          (result
+;;           (rxt--read-pcre "Test: ")))
+;;     (should (string= result "(?si)regexp text")))
+
+;;   (let* ((unread-command-events
+;;           (string-to-list "\C-ciregexp text\C-ci\C-j"))
+;;          (result
+;;           (rxt--read-pcre "Test: ")))
+;;     (should (string= result "regexp text"))))
 
 
 ;; The following tests are adapted from the first set of tests

@@ -598,13 +598,6 @@ these commands only."
     map)
   "Minibuffer keymap for `rxt--read-pcre'.")
 
-(defvar rxt--read-flags nil
-  "Flags to apply to the PCRE regexp being read, as a list of characters.
-Currently the /s, /x and /i flags are supported to some extent.")
-
-(defvar rxt--base-prompt nil
-  "Current minibuffer prompt for `rxt--read-pcre'.")
-
 (defun rxt--read-pcre (prompt)
   "Read a PCRE regexp for translation, together with option flags.
 
@@ -617,11 +610,7 @@ commands: \\<rxt--read-pcre-map>
 
 In single-line mode, `.' will match newlines.
 In extended mode, whitespace is not significant."
-  (let ((rxt--read-flags nil)
-        (rxt--base-prompt prompt))
-    (rxt--add-flags
-     (read-from-minibuffer prompt nil rxt--read-pcre-map)
-     (apply #'string rxt--read-flags))))
+  (read-from-minibuffer prompt nil rxt--read-pcre-map))
 
 (defun rxt--toggle-s-mode ()
   "Toggle emulated PCRE single-line (s) flag."
@@ -639,17 +628,24 @@ In extended mode, whitespace is not significant."
   (rxt--toggle-flag ?i))
 
 (defun rxt--toggle-flag (char)
-  "Toggle CHAR, a PCRE flag, in `rxt--read-flags'."
-  (setq rxt--read-flags
-        (if (memq char rxt--read-flags)
-            (delq char rxt--read-flags)
-          (cons char rxt--read-flags)))
-  (let ((prompt
-         (if rxt--read-flags
-             (concat rxt--base-prompt "(?" rxt--read-flags ") ")
-           rxt--base-prompt))
-        (inhibit-read-only t))
-    (put-text-property (point-min) (minibuffer-prompt-end) 'display prompt)))
+  "Toggle CHAR, a PCRE flag, in the regexp in the minibuffer."
+  (let* ((flags nil)
+         (flags-regexp (rx "(?" (group (+ (any ?i ?s ?x))) ")")))
+    (save-excursion
+      (goto-char (minibuffer-prompt-end))
+      (when (looking-at flags-regexp)
+        (setq flags (string-to-list (match-string 1)))
+        (replace-match ""))
+      (setq flags
+            (if (memq char flags)
+                (delq char flags)
+              (cons char flags)))
+      (when flags
+        (insert (concat "(?" flags ")"))))
+    (when
+        (and (= (point) (minibuffer-prompt-end))
+             (looking-at flags-regexp))
+      (forward-sexp))))
 
 
 ;;;; Minor mode for using emulated PCRE syntax
@@ -839,7 +835,10 @@ Consider using `pcre-mode' instead of this function."
   (around pcre-mode first (prompt &optional defaults history) disable)
   "Read regexp using PCRE syntax and convert to Elisp equivalent."
   (ad-set-arg 0 (concat "[PCRE] " prompt))
-  ad-do-it
+  (minibuffer-with-setup-hook
+      (lambda ()
+        (use-local-map rxt--read-pcre-map))
+    ad-do-it)
   (setq ad-return-value
         (pcre-to-elisp/cached ad-return-value)))
 
@@ -1053,13 +1052,10 @@ Throws an error if PCRE contains any infinite quantifiers."
   (interactive (rxt-interactive/pcre))
   (rxt-return-sexp (rxt-adt->strings (rxt-parse-pcre (rxt--add-flags pcre flags)))))
 
-(defun rxt--flags (pcre)
-  (get-text-property 0 'rxt-pcre-flags pcre))
-
 (defun rxt--add-flags (pcre flags)
-  "Return PCRE, with FLAGS as a text property."
-  (if flags
-      (propertize pcre 'rxt-pcre-flags flags)
+  "Prepend FLAGS to PCRE."
+  (if (not (zerop (length flags)))
+      (concat "(?" flags ")" pcre)
     pcre))
 
 
@@ -2069,10 +2065,9 @@ otherwise it would not match.")
 
 (defun rxt-parse-re (re pcre-p)
   (let* ((rxt-parse-pcre pcre-p)
-         (flags (and pcre-p (rxt--flags re)))
-         (rxt-pcre-extended-mode (cl-find ?x flags))
-         (rxt-pcre-s-mode        (cl-find ?s flags))
-         (rxt-pcre-case-fold     (cl-find ?i flags))
+         (rxt-pcre-extended-mode nil)
+         (rxt-pcre-s-mode        nil)
+         (rxt-pcre-case-fold     nil)
 
          ;; Bind regexps to match syntax that differs between PCRE and
          ;; Elisp only in the addition of a backslash "\"
@@ -3130,18 +3125,13 @@ in character classes as outside them."
                       (reb-empty-regexp))))
           (cond ((eq reb-re-syntax 'read)
                  (print re (current-buffer)))
-                ;; For PCRE syntax the value of reb-regexp-src is a
-                ;; string with flags as text properties
                 ((eq reb-re-syntax 'pcre)
-                 (let* ((src (reb-target-binding reb-regexp-src))
-                        (flags (get-text-property 0 'rxt-pcre-flags src)))
-                   (if (not src)
-                       (insert "\n//")
-                     (insert "\n/" src "/" (or flags "")))))
-
+                 (let ((src (reb-target-binding reb-regexp-src)))
+                   (if src
+                       (insert "\n/" src "/")
+                     (insert "\n//"))))
                 ((eq reb-re-syntax 'string)
                  (insert "\n\"" re "\""))
-
                 ;; For the Lisp syntax we need the "source" of the regexp
                 ((reb-lisp-syntax-p)
                  (insert (or (reb-target-binding reb-regexp-src)
