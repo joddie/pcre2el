@@ -2374,9 +2374,10 @@ in character classes as outside them."
           (search-forward ")")
           (throw 'return (rxt-empty-string)))
          ((rx (or                       ; Flags     (?isx-isx
-               (seq (group (* (any "isx"))) "-" (group (+ (any "isx"))))
-               (seq (group (+ (any "isx"))))))
-          (let ((begin (match-beginning 0))
+               (seq (group (* (any "gimosx"))) "-" (group (+ (any "gimosx"))))
+               (seq (group (+ (any "gimosx"))))))
+          (let ((token (match-string 0))
+                (begin (match-beginning 0))
                 (on (or (match-string 1) (match-string 3)))
                 (off (or (match-string 2) "")))
             (if (cl-find ?x on)  (setq extended-mode t))
@@ -2384,7 +2385,12 @@ in character classes as outside them."
             (if (cl-find ?i on)  (setq case-fold t))
             (if (cl-find ?x off) (setq extended-mode nil))
             (if (cl-find ?s off) (setq single-line-mode nil))
-            (if (cl-find ?i off) (setq case-fold nil)))
+            (if (cl-find ?i off) (setq case-fold nil))
+            (when (string-match-p "[gmo]" token)
+              (display-warning
+               'rxt
+               (format
+                "Unhandled PCRE flags (?%s" token))))
           (rxt-token-case
            (":" (setq shy t))        ; Shy group with flags (?isx-isx: ...
            (")"                      ; Set flags (?isx-isx)
