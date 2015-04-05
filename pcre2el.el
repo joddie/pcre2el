@@ -705,7 +705,11 @@ corresponding entries are deleted from the hash tables
   (when (not (eq isearch-search-fun-function #'isearch-search-fun-default))
     (message "Warning: pcre-mode overriding existing isearch function `%s'"
              isearch-search-fun-function))
-  (setq pcre-old-isearch-search-fun-function isearch-search-fun-function)
+  ;; Prevent an infinite loop, if a previous isearch in pcre-mode
+  ;; exited without restoring the original search function for some
+  ;; reason
+  (unless (eq isearch-search-fun-function #'pcre-isearch-search-fun-function)
+    (setq pcre-old-isearch-search-fun-function isearch-search-fun-function))
   (set (make-local-variable 'isearch-search-fun-function)
        #'pcre-isearch-search-fun-function))
 
@@ -719,7 +723,7 @@ This is set as the value of `isearch-search-fun-function' when
 `pcre-mode' is enabled.  Returns a function which searches using
 emulated PCRE regexps when `isearch-regexp' is true."
   (if (not isearch-regexp)
-      (isearch-search-fun-default)
+      (funcall (or pcre-old-isearch-search-fun-function 'isearch-search-fun-default))
     (lambda (string bound noerror)
       ;; Raise an error if the regexp ends in an incomplete escape
       ;; sequence (= odd number of backslashes).
