@@ -722,17 +722,17 @@ corresponding entries are deleted from the hash tables
 This is set as the value of `isearch-search-fun-function' when
 `pcre-mode' is enabled.  Returns a function which searches using
 emulated PCRE regexps when `isearch-regexp' is true."
-  (if (not isearch-regexp)
-      (funcall (or pcre-old-isearch-search-fun-function 'isearch-search-fun-default))
-    (lambda (string bound noerror)
-      ;; Raise an error if the regexp ends in an incomplete escape
-      ;; sequence (= odd number of backslashes).
-      ;; TODO: Perhaps this should really be handled in rxt-pcre-to-elisp?
-      (if (isearch-backslash string) (rxt-error "Trailing backslash"))
-      (let ((regexp (pcre-to-elisp/cached string)))
-        (if isearch-forward
-            (re-search-forward regexp bound noerror)
-          (re-search-backward regexp bound noerror))))))
+  (lambda (string bound noerror)
+    (let ((real-search-function
+           (funcall (or pcre-old-isearch-search-fun-function 'isearch-search-fun-default))))
+      (if (not isearch-regexp)
+          (funcall real-search-function string bound noerror)
+        ;; Raise an error if the regexp ends in an incomplete escape
+        ;; sequence (= odd number of backslashes).
+        ;; TODO: Perhaps this should really be handled in rxt-pcre-to-elisp?
+        (if (isearch-backslash string) (rxt-error "Trailing backslash"))
+        (funcall real-search-function
+                 (pcre-to-elisp/cached string) bound noerror)))))
 
 (defadvice isearch-message-prefix (after pcre-mode disable)
   "Add \"PCRE\" to the Isearch message when searching by regexp in `pcre-mode'."
