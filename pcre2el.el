@@ -1,4 +1,4 @@
-;;; pcre2el.el --- parse, convert, and font-lock PCRE, Emacs and rx regexps
+;;; pcre2el.el --- parse, convert, and font-lock PCRE, Emacs and rx regexps -*- lexical-binding: t -*-
 
 ;; Copyright (C) 2012-2014 Jon Oddie <jonxfield@gmail.com>
 
@@ -1091,7 +1091,7 @@ interactively."
   (interactive (rxt-interactive/pcre))
   (let ((rxt-explain t)
         (rxt-verbose-rx-translation rxt-explain-verbosely))
-    (rxt-pp-rx regexp (rxt-pcre-to-rx regexp))))
+    (rxt-pp-rx regexp (rxt-pcre-to-rx regexp flags))))
 
 
 ;;;; Commands that depend on the major mode in effect
@@ -1297,8 +1297,7 @@ the kill ring; see the two functions named above for details."
 
 (defun rxt-highlight-text ()
   "Highlight the regex syntax at point and its corresponding RX/string form."
-  (let ((all-bounds (get-char-property (point) 'rxt-bounds))
-        (end (get-char-property (point) 'rxt-highlight-end)))
+  (let ((all-bounds (get-char-property (point) 'rxt-bounds)))
     (mapc #'delete-overlay rxt-highlight-overlays)
     (setq rxt-highlight-overlays nil)
     (dolist (bounds all-bounds)
@@ -2298,8 +2297,7 @@ in character classes as outside them."
     (let ((shy nil)
           (extended-mode rxt-pcre-extended-mode)
           (single-line-mode rxt-pcre-s-mode)
-          (case-fold rxt-pcre-case-fold)
-          (subgroup-begin (1- (point))))
+          (case-fold rxt-pcre-case-fold))
       (rxt-extended-skip)
       ;; Check for special (? ..) and (* ...) syntax
       (rxt-token-case
@@ -2315,7 +2313,6 @@ in character classes as outside them."
                (seq (group (* (any "gimosx"))) "-" (group (+ (any "gimosx"))))
                (seq (group (+ (any "gimosx"))))))
           (let ((token (match-string 0))
-                (begin (match-beginning 0))
                 (on (or (match-string 1) (match-string 3)))
                 (off (or (match-string 2) "")))
             (if (cl-find ?x on)  (setq extended-mode t))
@@ -2740,7 +2737,7 @@ in character classes as outside them."
 ;; This idea is stolen straight out of the scsh implementation.
 
 (defun rxt-adt->pcre (re)
-  (cl-destructuring-bind (s lev) (rxt-adt->pcre/lev re) s))
+  (cl-destructuring-bind (s _) (rxt-adt->pcre/lev re) s))
 
 (defun rxt-adt->pcre/lev (re)
   (cl-typecase re
