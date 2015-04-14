@@ -273,16 +273,16 @@
 
   ;; Char sets with the same case-folding behaviour should be folded together
   (let* ((char-set-1
-          (make-rxt-char-set-union :chars '(?a ?b ?c)))
+          (make-rxt-char-set-union :chars '(?a ?q ?x)))
          (char-set-2
-          (make-rxt-char-set-union :chars '(?1 ?2 ?3)))
+          (make-rxt-char-set-union :chars '(?1 ?9 ?5)))
          (choice
           (rxt-choice char-set-1 char-set-2)))
     (should (rxt-char-set-union-p choice))
     (should
      (rxt--char-set-equal
       choice
-      (make-rxt-char-set-union :chars '(?a ?b ?c ?1 ?2 ?3)))))
+      (make-rxt-char-set-union :chars '(?a ?q ?x ?1 ?9 ?5)))))
 
   ;; Char-sets with different case-folding behaviour should NOT be
   ;; folded together
@@ -310,7 +310,9 @@
        (rxt--set-equal (rxt-char-set-union-ranges a)
                        (rxt-char-set-union-ranges b))
        (rxt--set-equal (rxt-char-set-union-classes a)
-                       (rxt-char-set-union-classes b))))
+                       (rxt-char-set-union-classes b))
+       (eq (rxt-char-set-union-case-fold a)
+           (rxt-char-set-union-case-fold b))))
 
 (ert-deftest rxt--all-char-set-union-chars ()
   (should
@@ -427,6 +429,35 @@
   (should (equal (rxt--extract-ranges '(0 3 4 5)) '((0 . 0) (3 . 5))))
   (should (equal (rxt--extract-ranges '(0 0 0 3 3 4 5 0 3 4 5)) '((0 . 0) (3 . 5))))
   (should (equal (rxt--extract-ranges '(10 9 8 7 6 5)) '((5 . 10)))))
+
+(ert-deftest rxt-char-set-union-case-fold-1 ()
+  (should
+   (rxt--char-set-equal
+    (rxt-char-set-union
+     (make-rxt-char-set-union :chars '(?a) :case-fold t)
+     (make-rxt-char-set-union :case-fold t))
+    (make-rxt-char-set-union :chars '(?a) :case-fold t)))
+
+  (should
+   (rxt--char-set-equal
+    (rxt-char-set-union
+     ?a
+     (make-rxt-char-set-union :case-fold t))
+    (make-rxt-char-set-union :chars '(?a) :case-fold t)))
+
+  (should
+   (rxt--char-set-equal
+    (rxt-char-set-union
+     "a"
+     (make-rxt-char-set-union :case-fold t))
+    (make-rxt-char-set-union :chars '(?a) :case-fold t)))
+
+  (should
+   (rxt--char-set-equal
+    (rxt-char-set-union
+     (make-rxt-char-set-union :case-fold t)
+     (rxt-string "a"))
+    (make-rxt-char-set-union :chars '(?a) :case-fold t))))
 
 
 ;;; PCRE parsing tests

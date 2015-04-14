@@ -1511,7 +1511,6 @@ are simplified in the following ways:
         (_
          (make-rxt-choice simplified-alternatives))))))
 
-
 (defun rxt--simplify-alternatives (alternatives)
   "Simplify a set of regexp alternatives.
 
@@ -1549,9 +1548,9 @@ list (OTHER-ELEMENTS CHAR-SET CASE-FOLDED-CHAR-SET):
                (if (rxt-char-set-union-case-fold re)
                    (list tail
                          char-set
-                         (rxt-char-set-adjoin! case-fold-char-set re))
+                         (rxt-char-set-union case-fold-char-set re))
                  (list tail
-                       (rxt-char-set-adjoin! char-set re)
+                       (rxt-char-set-union char-set re)
                        case-fold-char-set)))
 
               ((and (rxt-string-p re)    ; Same for 1-char strings
@@ -1559,11 +1558,9 @@ list (OTHER-ELEMENTS CHAR-SET CASE-FOLDED-CHAR-SET):
                (if (rxt-string-case-fold re)
                    (list tail
                          char-set
-                         (rxt-char-set-adjoin! case-fold-char-set
-                                               (rxt-string-chars re)))
+                         (rxt-char-set-union case-fold-char-set re))
                  (list tail
-                       (rxt-char-set-adjoin! char-set
-                                             (rxt-string-chars re))
+                       (rxt-char-set-union char-set re)
                        case-fold-char-set)))
 
               (t                         ; Otherwise.
@@ -1649,85 +1646,53 @@ list (OTHER-ELEMENTS CHAR-SET CASE-FOLDED-CHAR-SET):
        (null (rxt-char-set-union-classes cset))))
 
 ;; Simple union constructor
-(defun rxt-simple-char-set (item)
-  "Construct an abstract regexp character set from ITEM.
+(defun rxt-char-set-union (&rest items)
+  "Construct an regexp character set representing the union of ITEMS.
 
-ITEM may be a single character, a string or list of characters, a
-range represented as a cons (FROM . TO), a symbol representing a
-POSIX class, or an existing character set, which is returned
-unchanged."
-  (cond
-   ((rxt-char-set-p item) item)
+Each element of ITEMS may be either: a character; a
+single-character string; a single-character `rxt-string' object;
+a cons, (FROM . TO) representing a range of characters; a symbol,
+representing a named character class; or an `rxt-char-set-union'
+object.  All `rxt-char-set-union' objects in ITEMS must have the
+same `case-fold' property."
+  (let ((chars '())
+        (ranges '())
+        (classes '())
+        (case-fold 'undetermined))
+    (dolist (item items)
+      (cl-etypecase item
+        (character
+         (push item chars))
 
-   ((integerp item)
-    (make-rxt-char-set-union :chars (list item)))
+        (string
+         (cl-assert (= 1 (length item)))
+         (push (string-to-char item) chars))
 
-   ((consp item)
-    (if (consp (cdr item))
-        (make-rxt-char-set-union :chars item)         ; list of chars
-      (make-rxt-char-set-union :ranges (list item)))) ; range (from . to)
+        (rxt-string
+         (cl-assert (= 1 (length (rxt-string-chars item))))
+         (push (string-to-char (rxt-string-chars item)) chars))
 
-   ((stringp item)
-    (make-rxt-char-set-union :chars (mapcar 'identity item)))
+        (cons                           ; range (from . to)
+         (cl-check-type (car item) character)
+         (cl-check-type (cdr item) character)
+         (push item ranges))
 
-   ((symbolp item)
-    (make-rxt-char-set-union :classes (list item)))
+        (symbol                         ; named character class
+         (push item classes))
 
-   (t
-    (rxt-error "Can't construct character set union from %S" item))))
+        (rxt-char-set-union
+         (if (eq case-fold 'undetermined)
+             (setq case-fold (rxt-char-set-union-case-fold item))
+           (unless (eq case-fold (rxt-char-set-union-case-fold item))
+             (error "Cannot construct union of char-sets with unlike case-fold setting: %S" item)))
+         (setq chars (nconc chars (rxt-char-set-union-chars item)))
+         (setq ranges (nconc ranges (rxt-char-set-union-ranges item)))
+         (setq classes (nconc classes (rxt-char-set-union-classes item))))))
 
-;;; Generalized union constructor: falls back to rxt-choice if
-;;; necessary
-(defun rxt-char-set-union (csets)
-  (let ((union (make-rxt-char-set-union)))
-    (dolist (cset csets)
-      (if (and (rxt-char-set-union-p cset)
-               (rxt-char-set-union-p union))
-          (setq union (rxt-char-set-adjoin! union cset))
-        (setq union (rxt-choice union cset))))
-    union))
-
-;; Destructive character set union
-(defun rxt-char-set-adjoin! (cset item)
-  "Destructively add the contents of ITEM to character set union CSET.
-
-CSET must be an rxt-char-set. ITEM may be an rxt-char-set-union, or any
-of these shortcut representations: a single character which
-stands for itself, a cons (FROM . TO) representing a range, or a
-symbol naming a posix class: 'digit, 'alnum, etc.
-
-Returns the union of CSET and ITEM; CSET may be destructively
-modified."
-  (cl-assert (rxt-char-set-union-p cset))
-
-  (cond
-   ((integerp item)     ; character
-    (push item (rxt-char-set-union-chars cset)))
-
-   ((consp item)
-    (if (consp (cdr item))
-        (dolist (char item)             ; list of chars
-          (rxt-char-set-adjoin! cset char))
-      (push item (rxt-char-set-union-ranges cset)))) ; range (from . to)
-
-   ((stringp item)
-    (mapc (lambda (char)
-            (rxt-char-set-adjoin! cset char))
-          item))
-
-   ((symbolp item)      ; posix character class
-    (push item (rxt-char-set-union-classes cset)))
-
-   ((rxt-char-set-union-p item)
-    (dolist (type (list (rxt-char-set-union-chars item)
-                        (rxt-char-set-union-ranges item)
-                        (rxt-char-set-union-classes item)))
-      (dolist (thing type)
-        (rxt-char-set-adjoin! cset thing))))
-
-   (t
-    (rxt-error "Can't adjoin non-rxt-char-set, character, range or symbol %S" item)))
-  cset)
+    (make-rxt-char-set-union :chars chars :ranges ranges :classes classes
+                             :case-fold (if (eq case-fold 'undetermined)
+                                            rxt-pcre-case-fold
+                                          case-fold))))
 
 (defun rxt--all-char-set-union-chars (char-set)
   "Return a list of all characters in CHAR-SET."
@@ -1763,7 +1728,10 @@ lowercase versions of all characters in CHAR-SET."
                      (t (push (cons start end) ranges))))
       (make-rxt-char-set-union :chars (nreverse singletons)
                                :ranges (nreverse ranges)
-                               :classes classes))))
+                               :classes classes
+                               :case-fold (if case-fold-p
+                                              nil
+                                            (rxt-char-set-union-case-fold char-set))))))
 
 (defun rxt--remove-redundant-chars (chars classes)
   "Remove all characters which match a character class in CLASSES from CHARS."
@@ -1828,27 +1796,17 @@ Example:
                (:include rxt-char-set))
   elt)
 
-;; Complement constructor: checks types, unwraps existing negations
-(defun rxt-negate (cset)
-  "Return the logical complement (negation) of CSET.
+(defun rxt-negate (char-set)
+  "Construct the logical complement (negation) of CHAR-SET.
 
-CSET may be one of the following types: `rxt-char-set-union',
-`rxt-syntax-class', `rxt-char-category', `rxt-char-set-negation';
-or a shorthand char-set specifier (see `rxt-char-set')`."
-  (cond ((or (rxt-char-set-union-p cset)
-             (rxt-syntax-class-p cset)
-             (rxt-char-category-p cset))
-         (make-rxt-char-set-negation :elt cset))
+CHAR-SET may be any of the following types: `rxt-char-set-union',
+`rxt-syntax-class', `rxt-char-category', or `rxt-char-set-negation'."
+  (cl-etypecase char-set
+    ((or rxt-char-set-union rxt-syntax-class rxt-char-category)
+     (make-rxt-char-set-negation :elt char-set))
 
-        ((or (integerp cset) (consp cset) (symbolp cset) (stringp cset))
-         (make-rxt-char-set-negation
-          :elt (rxt-simple-char-set cset)))
-
-        ((rxt-char-set-negation-p cset)
-         (rxt-char-set-negation-elt cset))
-
-        (t
-         (rxt-error "Can't negate non-char-set or syntax class %s" cset))))
+    (rxt-char-set-negation
+     (rxt-char-set-negation-elt char-set))))
 
 ;;; Intersections of char sets
 
@@ -1863,14 +1821,14 @@ or a shorthand char-set specifier (see `rxt-char-set')`."
   elts)
 
 ;; Intersection constructor
-(defun rxt-char-set-intersection (charsets)
+(defun rxt-char-set-intersection (&rest charsets)
   (let ((elts '())
         (cmpl (make-rxt-char-set-union)))
     (dolist (cset (rxt-int-flatten charsets))
       (cond
        ((rxt-char-set-negation-p cset)
         ;; Fold negated charsets together: ~A & ~B = ~(A|B)
-        (setq cmpl (rxt-char-set-adjoin! cmpl (rxt-char-set-negation-elt cset))))
+        (setq cmpl (rxt-char-set-union cmpl (rxt-char-set-negation-elt cset))))
 
        ((rxt-char-set-union-p cset)
         (push cset elts))
@@ -1974,33 +1932,19 @@ Returns two strings: the regexp and the flags."
 
 
 ;;;; Parser constants
-
-(defconst rxt-pcre-word-chars
-  (make-rxt-char-set-union :chars '(?_) :classes '(alnum)))
-(defconst rxt-pcre-non-word-chars (rxt-negate rxt-pcre-word-chars))
-
-(defconst rxt-digit-chars (rxt-simple-char-set 'digit))
-(defconst rxt-non-digit-chars (rxt-negate rxt-digit-chars))
-(defconst rxt-space-chars (rxt-simple-char-set 'space))
-(defconst rxt-non-space-chars (rxt-negate rxt-space-chars))
-
-(defconst rxt-pcre-horizontal-whitespace-chars
-  (rxt-simple-char-set
-   '(#x0009 #x0020 #x00A0 #x1680 #x180E #x2000 #x2001 #x2002 #x2003
-            #x2004 #x2005 #x2006 #x2007 #x2008 #x2009 #x200A #x202F
-            #x205F #x3000)))
-(defconst rxt-pcre-non-horizontal-whitespace-chars
-  (rxt-negate rxt-pcre-horizontal-whitespace-chars))
-
-(defconst rxt-pcre-vertical-whitespace-chars
-  (rxt-simple-char-set '(#x000A #x000B #x000C #x000D #x0085 #x2028 #x2029)))
-(defconst rxt-pcre-non-vertical-whitespace-chars
-  (rxt-negate rxt-pcre-vertical-whitespace-chars))
-
-(defconst rxt-pcre-whitespace-chars
-  (rxt-simple-char-set '(9 10 12 13 32)))
-(defconst rxt-pcre-non-whitespace-chars
-  (rxt-negate rxt-pcre-whitespace-chars))
+(defconst rxt-pcre-char-set-alist
+  `((?w .                               ; "word" characters
+        (?_ alnum))
+    (?d .                               ; digits
+        (digit))
+    (?h .                               ; horizontal whitespace
+        (          #x0009 #x0020 #x00A0 #x1680 #x180E #x2000 #x2001 #x2002 #x2003
+          #x2004 #x2005 #x2006 #x2007 #x2008 #x2009 #x200A #x202F
+          #x205F #x3000))
+    (?s .                               ; whitespace
+        (9 10 12 13 32))
+    (?v .                               ; vertical whitespace
+        (#x000A #x000B #x000C #x000D #x0085 #x2028 #x2029))))
 
 (defconst rxt-pcre-named-classes-regexp
   (rx "[:"
@@ -2296,17 +2240,9 @@ otherwise it would not match.")
                (char (char-to-string (char-before end))))
           (rxt-seq (rxt-string str)
                    (rxt-parse-quantifiers (rxt-string char))))))
-     ;; Character classes: word, digit, whitespace
-     ((rx "\\w") rxt-pcre-word-chars)
-     ((rx "\\W") rxt-pcre-non-word-chars)
-     ((rx "\\d") rxt-digit-chars)
-     ((rx "\\D") rxt-non-digit-chars)
-     ((rx "\\h") rxt-pcre-horizontal-whitespace-chars)
-     ((rx "\\H") rxt-pcre-non-horizontal-whitespace-chars)
-     ((rx "\\s") rxt-space-chars)
-     ((rx "\\S") rxt-non-space-chars)
-     ((rx "\\v") rxt-pcre-vertical-whitespace-chars)
-     ((rx "\\V") rxt-pcre-non-vertical-whitespace-chars)
+     ;; Pre-defined character sets
+     ((rx "\\" (submatch (any "d" "D" "h" "H" "s" "S" "v" "V" "w" "W")))
+      (rxt--pcre-char-set (string-to-char (match-string 1))))
      ;; \ + digits: backreference or octal char?
      ((rx "\\" (submatch (+ (any "0-9"))))
       (let* ((digits (match-string 1))
@@ -2468,51 +2404,49 @@ in character classes as outside them."
 
   (rxt-with-source-location
    (let* ((negated (rxt-token-case
-                    ("\\^" t)
+                    ((rx "^") t)
                     (t nil)))
           (begin (point))
-          (result (if negated
-                      (rxt-negate (make-rxt-char-set-union))
-                    (make-rxt-char-set-union)))
-          (builder (if negated
-                       #'rxt-char-set-intersection
-                     #'rxt-char-set-union)))
+          (result
+           (if negated
+               (rxt-negate (rxt-char-set-union))
+             (rxt-char-set-union)))
+          (transformer
+           (if negated #'rxt-negate #'identity))
+          (builder
+           (if negated #'rxt-char-set-intersection #'rxt-choice)))
      (catch 'done
        (while t
          (when (eobp)
            (rxt-error "Missing close right bracket in regexp"))
-
-         (if (and (looking-at "\\]")
+         (if (and (looking-at (rx "]"))
                   (not (= (point) begin)))
              (throw 'done result)
-           (let* ((piece (rxt-parse-char-class-piece))
-                  (cset
-                   (if negated
-                       (rxt-negate (rxt-simple-char-set piece))
-                     (rxt-simple-char-set piece))))
-             (setq result
-                   (funcall builder (list result cset)))))))
-     ;; Skip over closing "]"
-     (forward-char)
+           (let ((piece (funcall transformer (rxt-parse-char-class-piece))))
+             (setq result (funcall builder result piece))))))
+     (forward-char)                     ; Skip over closing "]"
      result)))
 
-;; Within a charset, parse a single character, a character range or a
-;; posix class. Returns the character (i.e. an integer), a cons (from
-;; . to), or a symbol denoting the posix class
+;; Parse a single character, a character range, or a posix class
+;; within a character set context.  Returns an `rxt-char-set'.
 (defun rxt-parse-char-class-piece ()
   (let ((atom (rxt-parse-char-class-atom)))
-    (if (and (integerp atom)
-             (looking-at (rx (submatch "-") (not (any "]")))))
-        (let ((r-end (save-match-data (rxt-maybe-parse-range-end))))
-          (if (not r-end)
-              atom
-            (cons atom r-end)))
-      atom)))
+    (cl-typecase atom
+      (rxt-char-set                     ; return unchanged
+       atom)
+      (integer                          ; character: check for range
+       (let ((range-end (rxt-maybe-parse-range-end)))
+         (if range-end
+             (rxt-char-set-union (cons atom range-end))
+           (rxt-char-set-union atom))))
+      (t                                ; transform into character set
+       (rxt-char-set-union atom)))))
 
-;; Parse a single character or named class within a charset
+;; Parse a single character or named class within a charset.
 ;;
-;; Doesn't treat ] or - specially -- that's taken care of in other
-;; functions.
+;; Returns an integer (a character), a symbol (representing a named
+;; character class) or an `rxt-char-set' (for pre-defined character
+;; classes like \d, \W, etc.)
 (defun rxt-parse-char-class-atom ()
   (or
    ;; First, check for PCRE-specific backslash sequences
@@ -2541,43 +2475,44 @@ in character classes as outside them."
        ;; Backslash + digits => octal char
        ((rx "\\" (submatch (** 1 3 (any "0-7"))))
         (string-to-number (match-string 1) 8))
-       ;; Various character classes.
-       ((rx "\\d") rxt-digit-chars)
-       ((rx "\\D") rxt-non-digit-chars)
-       ((rx "\\h") rxt-pcre-horizontal-whitespace-chars)
-       ((rx "\\H") rxt-pcre-non-horizontal-whitespace-chars)
-       ((rx "\\s") rxt-pcre-whitespace-chars)
-       ((rx "\\S") rxt-pcre-non-whitespace-chars)
-       ((rx "\\v") rxt-pcre-vertical-whitespace-chars)
-       ((rx "\\V") rxt-pcre-non-vertical-whitespace-chars)
-       ((rx "\\w") rxt-pcre-word-chars)
-       ((rx "\\W") rxt-pcre-non-word-chars)
+       ;; Pre-defined character sets
+       ((rx "\\" (submatch (any "d" "D" "h" "H" "s" "S" "v" "V" "w" "W")))
+        (rxt--pcre-char-set (string-to-char (match-string 1))))
        ;; "\b" inside character classes is a backspace
        ((rx "\\b") ?\C-h)
        ;; Ignore other escapes
        ((rx "\\" (submatch nonl))
         (string-to-char (match-string 1))))))
 
-
-;; Parse a possible range tail. Called when point is before a dash "-"
-;; not followed by "]". Might fail, since the thing after the "-"
-;; could be a posix class rather than a character; in that case,
-;; leaves point where it was and returns nil.
+;; Look for a range tail (the "-z" in "a-z") after parsing a single
+;; character within in a character set.  Returns either a character
+;; representing the range end, or nil.
 (defun rxt-maybe-parse-range-end ()
-  (let (r-end pos)
-    (save-excursion
-      (forward-char)
-      (setq r-end (rxt-parse-char-class-atom)
-            pos (point)))
+  (let ((range-end nil) (end-position nil))
+    (when (looking-at (rx "-" (not (any "]"))))
+      (save-excursion
+        (forward-char)
+        (setq range-end (rxt-parse-char-class-atom)
+              end-position (point))))
 
-    (if (integerp r-end)
-        ;; This is a range: move after it and return the ending character
+    (if (characterp range-end)
+        ;; This is a range: move point after it and return the ending character
         (progn
-          (goto-char pos)
-          r-end)
+          (goto-char end-position)
+          range-end)
       ;; Not a range.
       nil)))
 
+;; Return the pre-defined PCRE char-set associated with CHAR: i.e. \d
+;; is digits, \D non-digits, \s space characters, etc.
+(defun rxt--pcre-char-set (char)
+  (let* ((base-char (downcase char))
+         (negated (/= char base-char))
+         (elements (assoc-default base-char rxt-pcre-char-set-alist))
+         (base-char-set (apply #'rxt-char-set-union elements)))
+    (if negated
+        (rxt-negate base-char-set)
+      base-char-set)))
 
 
 ;;;; 'Unparsers' to convert the syntax tree back to concrete `rx' or SRE syntax
