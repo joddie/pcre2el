@@ -103,7 +103,6 @@
 ;;     `C-c / p e': `rxt-pcre-to-elisp'
 ;;     `C-c / %': `pcre-query-replace-regexp'
 ;;     `C-c / p x': `rxt-pcre-to-rx'
-;;     `C-c / p s': `rxt-pcre-to-sre'
 ;;     `C-c / p '': `rxt-pcre-to-strings'
 ;;     `C-c / p /': `rxt-explain-pcre'
 
@@ -111,7 +110,6 @@
 ;;     `C-c / e /': `rxt-explain-elisp'
 ;;     `C-c / e p': `rxt-elisp-to-pcre'
 ;;     `C-c / e x': `rxt-elisp-to-rx'
-;;     `C-c / e s': `rxt-elisp-to-sre'
 ;;     `C-c / e '': `rxt-elisp-to-strings'
 ;;     `C-c / e t': `rxt-toggle-elisp-rx'
 ;;     `C-c / t': `rxt-toggle-elisp-rx'
@@ -289,11 +287,9 @@
 
 ;;   - `rxt-pcre-to-elisp'
 ;;   - `rxt-pcre-to-rx'
-;;   - `rxt-pcre-to-sre'
 ;;   - `rxt-pcre-to-strings'
 ;;   - `rxt-elisp-to-pcre'
 ;;   - `rxt-elisp-to-rx'
-;;   - `rxt-elisp-to-sre'
 ;;   - `rxt-elisp-to-strings'
 
 
@@ -385,13 +381,13 @@
 ;; 4 Internal details
 ;; ==================
 
-;;   Internally, `rxt' defines an abstract syntax tree data type for
-;;   regular expressions, parsers for Elisp and PCRE syntax, and
-;;   "unparsers" from to PCRE, rx, and SRE syntax. Converting from a parsed
-;;   syntax tree to Elisp syntax is a two-step process: first convert to
-;;   `rx' form, then let `rx-to-string' do the heavy lifting.  See
-;;   `rxt-parse-re', `rxt-adt->pcre', `rxt-adt->rx', and `rxt-adt->sre',
-;;   and the section beginning "Regexp ADT" in pcre2el.el for details.
+;;   `rxt' defines an internal syntax tree representation of regular
+;;   expressions, parsers for Elisp and PCRE syntax, and 'unparsers'
+;;   to convert the internal representation to PCRE or `rx' syntax.
+;;   Converting from the internal representation to Emacs syntax is
+;;   done by converting to `rx' form and passing it to `rx-to-string'.
+;;   See `rxt-parse-re', `rxt-adt->pcre', and `rxt-adt->rx' for
+;;   details.
 
 ;;   This code is partially based on Olin Shivers' reference SRE
 ;;   implementation in scsh, although it is simplified in some respects and
@@ -438,7 +434,7 @@
 
 ;;   - Wes Hardaker (hardaker) for the initial inspiration and subsequent
 ;;     hacking
-;;   - priyadarshan for requesting RX/SRE support
+;;   - priyadarshan for requesting RX support
 ;;   - Daniel Colascione (dcolascione) for a patch to support Emacs's
 ;;     explicitly-numbered match groups
 ;;   - Aaron Meurer (asmeurer) for requesting Isearch support
@@ -923,21 +919,6 @@ regexp syntax."
   (rxt-return-sexp (rxt-adt->rx (rxt-parse-elisp regexp))))
 
 ;;;###autoload
-(defun rxt-elisp-to-sre (regexp)
-  "Translate REGEXP, a regexp in Emacs Lisp syntax, to SRE syntax.
-
-See `rxt-elisp-to-pcre' for a description of the interactive behavior.
-
-SRE is an S-expression notation for regular expressions developed
-by Olin Shivers for scsh. See
-http://www.scsh.net/docu/post/sre.html.
-
-Emacs regexp features, including backreferences, which cannot be
-translated to SRE will cause an error."
-  (interactive (rxt-interactive/elisp))
-  (rxt-return-sexp (rxt-adt->sre (rxt-parse-elisp regexp))))
-
-;;;###autoload
 (defun rxt-elisp-to-strings (regexp)
   "Return a list of all strings matched by REGEXP, an Emacs Lisp regexp.
 
@@ -1030,16 +1011,6 @@ more details."
 See `rxt-pcre-to-elisp' for a description of the interactive behavior."
   (interactive (rxt-interactive/pcre))
   (rxt-return-sexp (rxt-adt->rx (rxt-parse-pcre (rxt--add-flags pcre flags)))))
-
-;;;###autoload
-(defun rxt-pcre-to-sre (pcre &optional flags)
-  "Translate PCRE, a regexp in Perl-compatible syntax, to SRE syntax.
-
-See `rxt-pcre-to-elisp' for a description of the interactive
-behavior and `rxt-elisp-to-sre' for information about the SRE
-S-expression format."
-  (interactive (rxt-interactive/pcre))
-  (rxt-return-sexp (rxt-adt->sre (rxt-parse-pcre (rxt--add-flags pcre flags)))))
 
 ;;;###autoload
 (defun rxt-pcre-to-strings (pcre &optional flags)
@@ -1154,14 +1125,12 @@ the kill ring; see the two functions named above for details."
     (define-key map (kbd "C-c / p /") 'rxt-explain-pcre)
     (define-key map (kbd "C-c / p e") 'rxt-pcre-to-elisp)
     (define-key map (kbd "C-c / p x") 'rxt-pcre-to-rx)
-    (define-key map (kbd "C-c / p s") 'rxt-pcre-to-sre)
     (define-key map (kbd "C-c / p '") 'rxt-pcre-to-strings)
 
     ;; From Elisp
     (define-key map (kbd "C-c / e /") 'rxt-explain-elisp)
     (define-key map (kbd "C-c / e p") 'rxt-elisp-to-pcre)
     (define-key map (kbd "C-c / e x") 'rxt-elisp-to-rx)
-    (define-key map (kbd "C-c / e s") 'rxt-elisp-to-sre)
     (define-key map (kbd "C-c / e '") 'rxt-elisp-to-strings)
     (define-key map (kbd "C-c / e t") 'rxt-toggle-elisp-rx)
     (define-key map (kbd "C-c / t") 'rxt-toggle-elisp-rx)
@@ -1381,9 +1350,9 @@ the kill ring; see the two functions named above for details."
 
 ;;; Other primitives
 (cl-defstruct (rxt-primitive
-               (:constructor rxt-primitive (pcre rx &optional (sre rx)))
+               (:constructor rxt-primitive (pcre rx))
                (:include rxt-syntax-tree))
-  pcre rx sre)
+  pcre rx)
 
 (defun rxt-bos () (rxt-primitive "\\A" 'bos))
 (defun rxt-eos () (rxt-primitive "\\Z" 'eos))
@@ -2512,9 +2481,8 @@ in character classes as outside them."
       base-char-set)))
 
 
-;;;; 'Unparsers' to convert the syntax tree back to concrete `rx' or SRE syntax
+;;;; Unparser to `rx' syntax
 
-;;; ADT -> rx notation
 (defconst rxt-rx-verbose-equivalents
   '((bol . line-start)
     (eol . line-end)
@@ -2646,72 +2614,6 @@ in character classes as outside them."
         (setq rx (make-symbol (symbol-name rx))))
       (setf (rxt-location rx) (rxt-location re)))
     rx))
-
-;;; ADT -> SRE notation
-(defun rxt-adt->sre (re)
-  (cond
-   ((rxt-primitive-p re)
-    (rxt-primitive-sre re))
-
-   ((rxt-string-p re) (rxt-string-chars re))
-
-   ((rxt-seq-p re)
-    (cons ': (mapcar #'rxt-adt->sre (rxt-seq-elts re))))
-
-   ((rxt-choice-p re)
-    (cons '| (mapcar #'rxt-adt->sre (rxt-choice-elts re))))
-
-   ((rxt-submatch-p re)
-    (if (rxt-seq-p (rxt-submatch-body re))
-        (cons 'submatch
-              (mapcar #'rxt-adt->sre (rxt-seq-elts (rxt-submatch-body re))))
-      (list 'submatch (rxt-adt->sre (rxt-submatch-body re)))))
-
-   ((rxt-repeat-p re)
-    (let ((from (rxt-repeat-from re))
-          (to (rxt-repeat-to re))
-          (greedy (rxt-repeat-greedy re))
-          (body (rxt-adt->sre (rxt-repeat-body re))))
-      (when (not greedy)
-        (rxt-error "No SRE translation of non-greedy repetition %s" re))
-      (cond
-       ((and (zerop from) (null to)) (list '* body))
-       ((and (equal from 1) (null to)) (list '+ body))
-       ((and (zerop from) (equal to 1)) (list '\? body))
-       ((null to) (list '>= from body))
-       ((equal from to)
-        (list '= from body))
-       (t
-        (list '** from to body)))))
-
-   ((rxt-char-set-union-p re)
-    (let* ((chars (mapconcat 'char-to-string (rxt-char-set-union-chars re) ""))
-
-           (ranges
-            (mapcar
-             (lambda (range)
-               (format "%c%c" (car range) (cdr range)))
-             (rxt-char-set-union-ranges re)))
-
-           (classes (rxt-char-set-union-classes re))
-
-           (all
-            (append
-             (if (not (zerop (length chars))) `((,chars)) nil)
-             (if ranges `((/ ,@ranges)) nil)
-             classes)))
-      (if (> (length all) 1)
-          (cons '| all)
-        (car all))))
-
-   ((rxt-char-set-negation-p re)
-    (list '~ (rxt-adt->sre (rxt-char-set-negation-elt re))))
-
-   ((rxt-char-set-intersection-p re)
-    (cons '& (mapcar #'rxt-adt->sre (rxt-char-set-intersection-elts re))))
-
-   (t
-    (rxt-error "No SRE translation for %s" re))))
 
 
 ;;;; 'Unparser' to PCRE notation
