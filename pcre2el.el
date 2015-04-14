@@ -1420,7 +1420,7 @@ the kill ring; see the two functions named above for details."
 ;; - Drops trivial "" elements
 ;; - Empty sequence => ""
 ;; - Singleton sequence is reduced to its one element.
-(defun rxt-seq (res)        ; Flatten nested seqs & drop ""'s.
+(defun rxt-seq (&rest res)        ; Flatten nested seqs & drop ""'s.
   (let ((res (rxt-seq-flatten res)))
     (if (consp res)
         (if (consp (cdr res))
@@ -1476,7 +1476,7 @@ the kill ring; see the two functions named above for details."
         (null (rxt-choice-elts re)))
    (rxt-empty-char-set-p re)))
 
-(defun rxt-choice (alternatives)
+(defun rxt-choice (&rest alternatives)
   "Simplify a set of regexp alternatives.
 
 ALTERNATIVES should be a list of `rxt-syntax-tree' objects to be
@@ -1684,7 +1684,7 @@ unchanged."
       (if (and (rxt-char-set-union-p cset)
                (rxt-char-set-union-p union))
           (setq union (rxt-char-set-adjoin! union cset))
-        (setq union (rxt-choice (list union cset)))))
+        (setq union (rxt-choice union cset))))
     union))
 
 ;; Destructive character set union
@@ -2116,7 +2116,7 @@ otherwise it would not match.")
          (rxt-pcre-s-mode rxt-pcre-s-mode)
          (rxt-pcre-case-fold rxt-pcre-case-fold))
      (if (eobp)
-         (rxt-seq nil)
+         (rxt-seq)
        (let ((branches '()))
          (cl-block nil
            (while t
@@ -2124,7 +2124,7 @@ otherwise it would not match.")
                (push branch branches)
                (rxt-token-case
                 (rxt-choice-regexp nil)
-                (t (cl-return (rxt-choice (reverse branches)))))))))))))
+                (t (cl-return (apply #'rxt-choice (reverse branches)))))))))))))
 
 ;; Skip over whitespace and comments in PCRE extended mode
 (defun rxt-extended-skip ()
@@ -2143,7 +2143,7 @@ otherwise it would not match.")
      (while (not (looking-at rxt-branch-end-regexp))
        (push (rxt-parse-piece branch-start-p) pieces)
        (setq branch-start-p nil))
-     (rxt-seq (reverse pieces)))))
+     (apply #'rxt-seq (reverse pieces)))))
 
 ;; Parse a regexp "piece": an atom (`rxt-parse-atom') plus any
 ;; following quantifiers
@@ -2294,8 +2294,8 @@ otherwise it would not match.")
         (let* ((end (match-beginning 0))
                (str (buffer-substring-no-properties begin (1- end)))
                (char (char-to-string (char-before end))))
-          (rxt-seq (list (rxt-string str)
-                         (rxt-parse-quantifiers (rxt-string char)))))))
+          (rxt-seq (rxt-string str)
+                   (rxt-parse-quantifiers (rxt-string char))))))
      ;; Character classes: word, digit, whitespace
      ((rx "\\w") rxt-pcre-word-chars)
      ((rx "\\W") rxt-pcre-non-word-chars)

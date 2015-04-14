@@ -187,11 +187,11 @@
 
 ;; Sequence constructor
 (ert-deftest rxt-seq-empty ()
-  (should (equal (rxt-empty-string) (rxt-seq '()))))
+  (should (equal (rxt-empty-string) (rxt-seq))))
 
 (ert-deftest rxt-seq-singleton ()
   (let* ((string (rxt-string "sample string"))
-         (sequence (rxt-seq (list string))))
+         (sequence (rxt-seq string)))
     (should (equal string sequence))))
 
 (ert-deftest rxt-seq-join-strings ()
@@ -199,7 +199,7 @@
   (let* ((string-1 (rxt-string "first"))
          (string-2 (rxt-string "second"))
          (string-3 (rxt-string "third"))
-         (sequence (rxt-seq (list string-1 string-2 string-3))))
+         (sequence (rxt-seq string-1 string-2 string-3)))
     (should (equal sequence
                    (rxt-string (concat (rxt-string-chars string-1)
                                        (rxt-string-chars string-2)
@@ -209,70 +209,67 @@
   ;; together
   (let* ((string-1 (rxt-string "case-sensitive" nil))
          (string-2 (rxt-string "case-insensitive" t))
-         (sequence (rxt-seq (list string-1 string-2))))
+         (sequence (rxt-seq string-1 string-2)))
     (should (rxt-seq-p sequence))
     (should (equal (rxt-seq-elts sequence)
                    (list string-1 string-2)))))
 
 (ert-deftest rxt-seq-flatten-sequences ()
   (let* ((sequence-1
-          (rxt-seq (list (rxt-bol)
-                         (rxt-string "word"))))
+          (rxt-seq (rxt-bol)
+                   (rxt-string "word")))
          (nested-sequence
-          (rxt-seq (list sequence-1
-                         (rxt-anything)
-                         (rxt-eol))))
+          (rxt-seq sequence-1
+                   (rxt-anything)
+                   (rxt-eol)))
          (flat-sequence
-          (rxt-seq (list (rxt-bol)
-                         (rxt-string "word")
-                         (rxt-anything)
-                         (rxt-eol)))))
+          (rxt-seq (rxt-bol)
+                   (rxt-string "word")
+                   (rxt-anything)
+                   (rxt-eol))))
     (should (equal nested-sequence flat-sequence)))
 
-  (let* ((sequence (rxt-seq (list (rxt-bol)
-                                  (rxt-anything)
-                                  (rxt-eol))))
-         (nested-1 (rxt-seq (list sequence)))
-         (nested-2 (rxt-seq (list nested-1))))
+  (let* ((sequence (rxt-seq (rxt-bol)
+                            (rxt-anything)
+                            (rxt-eol)))
+         (nested-1 (rxt-seq sequence))
+         (nested-2 (rxt-seq nested-1)))
     (should (equal sequence nested-1))
     (should (equal sequence nested-2))))
 
 (ert-deftest rxt-seq-remove-empty ()
-  (let ((sequence-1 (rxt-seq (list (rxt-bow)
-                                   (rxt-string "lorem ipsum")
-                                   (rxt-anything)
-                                   (rxt-eow))))
-        (sequence-2 (rxt-seq (list (rxt-empty-string)
-                                   (rxt-empty-string)
-                                   (rxt-bow)
-                                   (rxt-seq (list))
-                                   (rxt-string "lorem ipsum")
-                                   (rxt-seq (list))
-                                   (rxt-empty-string)
-                                   (rxt-anything)
-                                   (rxt-empty-string)
-                                   (rxt-eow)))))
+  (let ((sequence-1 (rxt-seq (rxt-bow)
+                             (rxt-string "lorem ipsum")
+                             (rxt-anything)
+                             (rxt-eow)))
+        (sequence-2 (rxt-seq (rxt-empty-string)
+                             (rxt-empty-string)
+                             (rxt-bow)
+                             (rxt-seq)
+                             (rxt-string "lorem ipsum")
+                             (rxt-seq)
+                             (rxt-empty-string)
+                             (rxt-anything)
+                             (rxt-empty-string)
+                             (rxt-eow))))
     (should (equal sequence-1 sequence-2))))
 
 ;;; Choice constructor
 (ert-deftest rxt-choice ()
   ;; Singleton elements should be returned unchanged
   (let ((element (rxt-string "example")))
-    (should (equal (rxt-choice (list element)) element)))
+    (should (equal (rxt-choice element) element)))
 
   ;; Nested choices should be flattened
   (should (equal (rxt-choice
-                  (list
-                   (rxt-choice
-                    (list
-                     (rxt-string "first")
-                     (rxt-string "second")))
-                   (rxt-string "third")))
-                 (rxt-choice
-                  (list
+                  (rxt-choice
                    (rxt-string "first")
-                   (rxt-string "second")
-                   (rxt-string "third")))))
+                   (rxt-string "second"))
+                  (rxt-string "third"))
+                 (rxt-choice
+                  (rxt-string "first")
+                  (rxt-string "second")
+                  (rxt-string "third"))))
 
   ;; Char sets with the same case-folding behaviour should be folded together
   (let* ((char-set-1
@@ -280,7 +277,7 @@
          (char-set-2
           (make-rxt-char-set-union :chars '(?1 ?2 ?3)))
          (choice
-          (rxt-choice (list char-set-1 char-set-2))))
+          (rxt-choice char-set-1 char-set-2)))
     (should (rxt-char-set-union-p choice))
     (should
      (rxt--char-set-equal
@@ -296,7 +293,7 @@
           (make-rxt-char-set-union :chars '(?1 ?2 ?3)
                                    :case-fold t))
          (choice
-          (rxt-choice (list char-set-1 char-set-2))))
+          (rxt-choice char-set-1 char-set-2)))
     (should (rxt-choice-p choice))))
 
 ;;; Repeat
