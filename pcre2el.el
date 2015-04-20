@@ -1899,16 +1899,18 @@ Returns two strings: the regexp and the flags."
               (rxt--add-flags pcre (match-string-no-properties 0))))))))))
 
 
-;;;; Parser constants
+;;;; Elisp and PCRE string notation parser
+
+;;; Parser constants
 (defconst rxt-pcre-char-set-alist
   `((?w .                               ; "word" characters
         (?_ alnum))
     (?d .                               ; digits
         (digit))
     (?h .                               ; horizontal whitespace
-        (          #x0009 #x0020 #x00A0 #x1680 #x180E #x2000 #x2001 #x2002 #x2003
-          #x2004 #x2005 #x2006 #x2007 #x2008 #x2009 #x200A #x202F
-          #x205F #x3000))
+        (#x0009 #x0020 #x00A0 #x1680 #x180E #x2000 #x2001 #x2002 #x2003
+                #x2004 #x2005 #x2006 #x2007 #x2008 #x2009 #x200A #x202F
+                #x205F #x3000))
     (?s .                               ; whitespace
         (9 10 12 13 32))
     (?v .                               ; vertical whitespace
@@ -1929,13 +1931,8 @@ Returns two strings: the regexp and the flags."
            "unibyte" "nonascii" "multibyte"))
       ":]"))
 
-
-;;;; Elisp and PCRE string notation parser
-
-
 ;;; The following dynamically bound variables control the operation of
 ;;; the parser (see `rxt-parse-re'.)
-
 (defvar rxt-parse-pcre nil
   "t if the rxt string parser is parsing PCRE syntax, nil for Elisp syntax.
 
@@ -2367,7 +2364,6 @@ in character classes as outside them."
 (defun rxt-parse-char-class ()
   (when (eobp)
     (rxt-error "Missing close right bracket in regexp"))
-
   (rxt-with-source-location
    (let* ((negated (rxt-token-case
                     ((rx "^") t)
