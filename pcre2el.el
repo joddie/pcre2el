@@ -969,7 +969,7 @@ Throws an error if REGEXP contains any infinite quantifiers."
                   (pcase rx-syntax
                     (`(seq . ,rest) `(rx . ,rest))
                     (form           `(rx ,form)))))
-            (prin1 rx-form (current-buffer))
+            (rxt-print rx-form)
             (narrow-to-region start (point)))
           (pp-buffer)
           ;; remove the extra newline that pp-buffer inserts
@@ -1164,7 +1164,7 @@ the kill ring; see the two functions named above for details."
   (add-hook 'post-command-hook 'rxt-highlight-text nil t)
   (rxt-highlight-text))
 
-;; Hack: stop paredit-mode interfering with `rxt-print-rx'
+;; Hack: stop paredit-mode interfering with `rxt-print'
 (eval-when-compile (declare-function paredit-mode "paredit.el"))
 (add-hook 'rxt-help-mode-hook
           (lambda ()
@@ -1181,6 +1181,32 @@ the kill ring; see the two functions named above for details."
 (define-key rxt-help-mode-map "u" 'backward-up-list)
 (define-key rxt-help-mode-map "d" 'down-list)
 
+(defvar rxt--print-with-overlays nil)
+(defvar rxt--print-depth 0)
+
+(defconst rxt--print-char-alist
+  '((?\a . "\\a")
+    (?\b . "\\b")
+    (?\t . "\\t")
+    (?\n . "\\n")
+    (?\v . "\\v")
+    (?\f . "\\f")
+    (?\r . "\\r")
+    (?\e . "\\e")
+    (?\s . "\\s")
+    (?\\ . "\\\\")
+    (?\d . "\\d"))
+  "Alist of characters to print using an escape sequence in Elisp source.
+See (info \"(elisp) Basic Char Syntax\").")
+
+(defconst rxt--whitespace-display-regexp
+  (rx-to-string `(any ,@(mapcar #'car rxt--print-char-alist))))
+
+(defconst rxt--print-special-chars
+  '(?\( ?\) ?\\ ?\| ?\; ?\' ?\` ?\" ?\# ?\. ?\,)
+  "Characters which require a preceding backslash in Elisp source.
+See (info \"(elisp) Basic Char Syntax\").")
+
 (defun rxt-pp-rx (regexp rx)
   "Display string regexp REGEXP with its `rx' form RX in an `rxt-help-mode' buffer."
   (with-current-buffer (get-buffer-create "* Regexp Explain *")
@@ -1191,48 +1217,101 @@ the kill ring; see the two functions named above for details."
       (insert (rxt--propertize-whitespace regexp))
       (newline 2)
       (save-excursion
-        (let ((sexp-begin (point)))
-          (rxt-print-rx rx)
+        (let ((sexp-begin (point))
+              (rxt--print-with-overlays t))
+          (rxt-print rx)
           (narrow-to-region sexp-begin (point))
           (pp-buffer)
           (widen)))
       (rxt-highlight-text))
     (pop-to-buffer (current-buffer))))
 
-(cl-defun rxt-print-rx (rx &optional (depth 0))
-  "Print RX like `print', adding text overlays for corresponding source locations."
-  (let ((begin (point)))
+(cl-defun rxt-print (rx)
+  "Insert RX, an `rx' form, into the current buffer, optionally adding overlays.
+
+Similar to `print' or `prin1', but ensures that `rx' forms are
+printed readably, using character or integer syntax depending on
+context.
+
+If `rxt--print-with-overlays' is non-nil, also creates overlays linking
+elements of RX to their corresponding locations in the source
+string (see `rxt-explain-elisp', `rxt-explain-pcre' and
+`rxt--make-help-overlays')."
+  (let ((start (point)))
     (cl-typecase rx
       (cons
-       (insert "(")
-       (cl-loop for tail on rx
-                do
-                (let ((hd (car tail))
-                      (tl (cdr tail)))
-                  (rxt-print-rx hd (+ depth 1))
-                  (if tl
-                      (if (consp tl)
-                          (insert " ")
-                        (insert " . ")
-                        (rxt-print-rx tl (+ depth 1))
-                        (insert ")"))
-                    (insert ")")))))
+       (pcase rx
+         (`(,(and (or `repeat `**) head)
+             ,(and (pred integerp) from)
+             ,(and (pred integerp) to)
+             . ,rest)
+           (insert (format "(%s %d %d" head from to))
+           (rxt--print-list-tail rest))
+         (`(,(and (or `repeat `= `>=) head)
+             ,(and (pred integerp) n)
+             . ,rest)
+           (insert (format "(%s %d" head n))
+           (rxt--print-list-tail rest))
+         (_
+          (rxt--print-list-tail rx t))))
+      (symbol
+       (cl-case rx
+         ;; `print' escapes the ? characters in the rx operators *?
+         ;; and +?, but this looks bad and is not strictly necessary:
+         ;; (eq (read "*?") (read "*\\?"))     => t
+         ;; (eq (read "+?") (read "+\\?"))     => t
+         ((*? +?) (insert (symbol-name rx)))
+         (t (prin1 rx (current-buffer)))))
       (string
        (insert (rxt--propertize-whitespace (prin1-to-string rx))))
-      ;; (number
-      ;;  (insert "?" (char-to-string rx)))
+      (character
+       (cond
+         ((eq ?  rx)
+          (insert "?"))
+         ((memq rx rxt--print-special-chars)
+          (insert "?\\" rx))
+         ((assq rx rxt--print-char-alist)
+          (insert "?" (assoc-default rx rxt--print-char-alist)))
+         (t
+          (insert "?" (char-to-string rx)))))
       (t
        (prin1 rx (current-buffer))))
-    (let ((location (rxt-location rx)))
-      (when (and location
-                 (rxt-location-start location)
-                 (rxt-location-end location))
-      (let* ((sexp-begin (copy-marker begin t))
-             (sexp-end (copy-marker (point)))
+    (when rxt--print-with-overlays
+      (rxt--make-help-overlays rx start (point)))))
+
+(defun rxt--print-list-tail (tail &optional open-paren)
+  (let ((rxt--print-depth (1+ rxt--print-depth)))
+    (let ((done nil))
+      (while (not done)
+        (cl-typecase tail
+          (null
+           (insert ")")
+           (setq done t))
+          (cons
+           (if open-paren
+               (progn
+                 (insert "(")
+                 (setq open-paren nil))
+             (insert " "))
+           (rxt-print (car tail))
+           (setq tail (cdr tail)))
+          (t
+           (insert " . ")
+           (rxt-print tail)
+           (insert ")")
+           (setq done t)))))))
+
+(defun rxt--make-help-overlays (rx start end)
+  (let ((location (rxt-location rx)))
+    (when (and location
+               (rxt-location-start location)
+               (rxt-location-end location))
+      (let* ((sexp-begin (copy-marker start t))
+             (sexp-end (copy-marker end))
              (sexp-bounds (list sexp-begin sexp-end))
 
-               (source-begin (1+ (rxt-location-start location)))
-               (source-end   (1+ (rxt-location-end   location)))
+             (source-begin (1+ (rxt-location-start location)))
+             (source-end   (1+ (rxt-location-end   location)))
              (source-bounds (list source-begin source-end))
 
              (bounds (list source-bounds sexp-bounds))
@@ -1240,17 +1319,8 @@ the kill ring; see the two functions named above for details."
              (sexp-ol (make-overlay sexp-begin sexp-end (current-buffer) t nil))
              (source-ol (make-overlay source-begin source-end (current-buffer) t nil)))
         (dolist (ol (list sexp-ol source-ol))
-          (overlay-put ol 'priority depth)
-            (overlay-put ol 'rxt-bounds bounds)))))))
-
-(defconst rxt--whitespace-display-alist
-  '(("\n" . "\\n")
-    ("\t" . "\\t")
-    ("\f" . "\\f")
-    ("\r" . "\\r")))
-
-(defconst rxt--whitespace-display-regexp
-  (regexp-opt (mapcar #'car rxt--whitespace-display-alist)))
+          (overlay-put ol 'priority rxt--print-depth)
+          (overlay-put ol 'rxt-bounds bounds))))))
 
 (defun rxt--propertize-whitespace (string)
   (let ((string (copy-sequence string))
@@ -1258,8 +1328,8 @@ the kill ring; see the two functions named above for details."
     (while (string-match rxt--whitespace-display-regexp string start)
       (put-text-property (match-beginning 0) (match-end 0)
                          'display
-                         (assoc-default (match-string 0 string)
-                                        rxt--whitespace-display-alist)
+                         (assoc-default (string-to-char (match-string 0 string))
+                                        rxt--print-char-alist)
                          string)
       (setq start (match-end 0)))
     string))

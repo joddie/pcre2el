@@ -621,11 +621,11 @@
 
 ;; Pretty-printing / explain tests
 
-(ert-deftest rxt--print-rx ()
+(ert-deftest rxt--print ()
   ;; Test that lists and dotted lists are printed correctly
   (cl-flet ((print-to-string (form)
               (with-temp-buffer
-                (rxt-print-rx form)
+                (rxt-print form)
                 (buffer-string))))
     (should (string= (print-to-string '(normal list))
                      "(normal list)"))
@@ -634,7 +634,25 @@
     (should (string= (print-to-string '(dotted . pair))
                      "(dotted . pair)"))
     (should (string= (print-to-string '(longer dotted . list))
-                     "(longer dotted . list)"))))
+                     "(longer dotted . list)"))
+
+    ;; Test correct printing of some `rx' forms
+    (should (string= (print-to-string '(? (any digit)))
+                     "(? (any digit))"))
+    (should (string= (print-to-string '(?? (any digit)))
+                     "(?? (any digit))"))
+    (should (string= (print-to-string '(*? "some regexp"))
+                     "(*? \"some regexp\")"))
+    (should (string= (print-to-string '(+? "some regexp"))
+                     "(+? \"some regexp\")"))
+    (should (string= (print-to-string '(any ?a ?q ?z))
+                     "(any ?a ?q ?z)"))
+    (should (string= (print-to-string '(any (?a . ?z) (?0 . ?3)))
+                     "(any (?a . ?z) (?0 . ?3))"))
+    (should (string= (print-to-string '(repeat 2 5 ?x))
+                     "(repeat 2 5 ?x)"))
+    (should (string= (print-to-string '(repeat 5 (any digit)))
+                     "(repeat 5 (any digit))"))))
 
 (ert-deftest rxt--propertize-whitespace ()
   (let ((string (rxt--propertize-whitespace "\n\t\f\r")))
