@@ -2993,7 +2993,7 @@ in character classes as outside them."
                                    (rxt-elisp-to-rx reb-regexp))))
                     ((pcre)
                      (setq reb-regexp-src
-                           (list (rxt-elisp-to-pcre reb-regexp) "")))))
+                           (rxt-elisp-to-pcre reb-regexp)))))
                 (with-current-buffer buffer
                   ;; Hack: prevent reb-auto-update from clobbering the
                   ;; reb-regexp-src we just set
@@ -3060,7 +3060,7 @@ in character classes as outside them."
                (rx-to-string (eval (car (read-from-string re))) t))
 
               ((eq reb-re-syntax 'pcre)
-               (rxt-pcre-to-elisp (car re) (cadr re)))
+               (rxt-pcre-to-elisp re))
 
               (t re))))
 
