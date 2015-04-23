@@ -2953,23 +2953,13 @@ in character classes as outside them."
 
 ;;;; RE-Builder hacks
 
-;;; These are implemented as advice so that they can be unloaded and
-;;; restore the original `re-builder' versions. However, each one is
-;;; basically a complete replacement for the function of the same name
-;;; (and most of the code is taken from re-builder.el).
-
 (defadvice reb-update-modestring
-  (around rxt () activate compile)
+  (after rxt () activate compile)
   "This function is hacked for emulated PCRE syntax and regexp conversion."
   (setq reb-mode-string
         (concat
          (format " (%s)" reb-re-syntax)
-         (if reb-subexp-mode
-             (format " (subexp %s)" (or reb-subexp-displayed "-"))
-           "")
-         (if (not (reb-target-binding case-fold-search))
-             " Case"
-           "")))
+         reb-mode-string))
   (force-mode-line-update))
 
 (defadvice reb-change-syntax
@@ -3004,65 +2994,29 @@ in character classes as outside them."
 (defadvice reb-read-regexp
   (around rxt () activate compile)
   "This function is hacked for emulated PCRE syntax and regexp conversion."
-  (setq ad-return-value
-        (save-excursion
-          (cond ((eq reb-re-syntax 'read)
-                 (goto-char (point-min))
-                 (read (current-buffer)))
-
-                ((eq reb-re-syntax 'string)
-                 (goto-char (point-min))
-                 (re-search-forward "\"")
-                 (let ((beg (point)))
-                   (goto-char (point-max))
-                   (re-search-backward "\"")
-                   (buffer-substring-no-properties beg (point))))
-
-                ((eq reb-re-syntax 'pcre)
-                 (goto-char (point-min))
-                 (rxt-read-delimited-pcre))
-
-                ((or (reb-lisp-syntax-p) (eq reb-re-syntax 'pcre))
-                 (buffer-string))))))
+  (if (eq reb-re-syntax 'pcre)
+      (setq ad-return-value
+            (save-excursion
+              (goto-char (point-min))
+              (rxt-read-delimited-pcre)))
+    ad-do-it))
 
 (defadvice reb-insert-regexp
   (around rxt () activate compile)
   "This function is hacked for emulated PCRE syntax and regexp conversion."
-  (setq ad-return-value
-        (let ((re (or (reb-target-binding reb-regexp)
-                      (reb-empty-regexp))))
-          (cond ((eq reb-re-syntax 'read)
-                 (print re (current-buffer)))
-                ((eq reb-re-syntax 'pcre)
-                 (let ((src (reb-target-binding reb-regexp-src)))
-                   (if src
-                       (insert "\n/" src "/")
-                     (insert "\n//"))))
-                ((eq reb-re-syntax 'string)
-                 (insert "\n\"" re "\""))
-                ;; For the Lisp syntax we need the "source" of the regexp
-                ((reb-lisp-syntax-p)
-                 (insert (or (reb-target-binding reb-regexp-src)
-                             (reb-empty-regexp))))))))
+  (if (eq reb-re-syntax 'pcre)
+      (let ((src (reb-target-binding reb-regexp-src)))
+        (if src
+            (insert "\n/" src "/")
+          (insert "\n//")))
+    ad-do-it))
 
 (defadvice reb-cook-regexp
   (around rxt (re) activate compile)
   "This function is hacked for emulated PCRE syntax and regexp conversion."
-  (setq ad-return-value
-        (cond ((eq reb-re-syntax 'lisp-re)
-               (when (fboundp 'lre-compile-string)
-                 (lre-compile-string (eval (car (read-from-string re))))))
-
-              ((eq reb-re-syntax 'sregex)
-               (apply 'sregex (eval (car (read-from-string re)))))
-
-              ((eq reb-re-syntax 'rx)
-               (rx-to-string (eval (car (read-from-string re))) t))
-
-              ((eq reb-re-syntax 'pcre)
-               (rxt-pcre-to-elisp re))
-
-              (t re))))
+  (if (eq reb-re-syntax 'pcre)
+      (setq ad-return-value (rxt-pcre-to-elisp re))
+    ad-do-it))
 
 (defadvice reb-update-regexp
   (around rxt () activate compile)
