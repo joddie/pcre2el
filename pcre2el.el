@@ -585,13 +585,19 @@ these commands only."
              (rxt--read-pcre prompt)))))
    nil))
 
-(defvar rxt--read-pcre-map
+(defvar rxt--toggle-flag-map
   (let ((map (make-sparse-keymap)))
     (set-keymap-parent map minibuffer-local-map)
     (define-key map (kbd "C-c s") #'rxt--toggle-s-mode)
     (define-key map (kbd "C-c x") #'rxt--toggle-x-mode)
     (define-key map (kbd "C-c i") #'rxt--toggle-i-mode)
     map)
+  "Keymap with bindings for toggling PCRE flags.
+
+These bindings will be used when reading PCREs from the minibuffer (see `rxt--read-pcre-map') and in the RE-Builder (see `rxt--re-builder-pcre-mode').")
+
+(defvar rxt--read-pcre-map
+  (make-composed-keymap rxt--toggle-flag-map minibuffer-local-map)
   "Minibuffer keymap for `rxt--read-pcre'.")
 
 (defun rxt--read-pcre (prompt)
@@ -626,22 +632,35 @@ In extended mode, whitespace is not significant."
 (defun rxt--toggle-flag (char)
   "Toggle CHAR, a PCRE flag, in the regexp in the minibuffer."
   (let* ((flags nil)
-         (flags-regexp (rx "(?" (group (+ (any ?i ?s ?x))) ")")))
+         (re-builder-p (eq (current-buffer) (get-buffer reb-buffer)))
+         (flags-regexp
+          (if re-builder-p
+              (rx (group (+ (any ?i ?s ?x))))
+            (rx "(?" (group (+ (any ?i ?s ?x))) ")"))))
     (save-excursion
-      (goto-char (minibuffer-prompt-end))
+      (if re-builder-p
+          (progn
+            (goto-char (point-max))
+            (search-backward "/")
+            (forward-char))
+          (goto-char (minibuffer-prompt-end)))
       (when (looking-at flags-regexp)
         (setq flags (string-to-list (match-string 1)))
-        (replace-match ""))
+        (let ((inhibit-modification-hooks t)) ; for re-builder
+          (replace-match "")))
       (setq flags
             (if (memq char flags)
                 (delq char flags)
               (cons char flags)))
       (when flags
-        (insert (concat "(?" flags ")"))))
-    (when
-        (and (= (point) (minibuffer-prompt-end))
-             (looking-at flags-regexp))
-      (forward-sexp))))
+        (insert (if re-builder-p
+                    (concat flags)
+                  (concat "(?" flags ")")))))
+    (unless re-builder-p
+      (when
+          (and (= (point) (minibuffer-prompt-end))
+               (looking-at flags-regexp))
+        (forward-sexp)))))
 
 
 ;;;; Minor mode for using emulated PCRE syntax
@@ -2968,28 +2987,31 @@ in character classes as outside them."
   (interactive
    (list (intern
           (completing-read (format "Select syntax (%s): " reb-re-syntax)
-                           '("read" "string" "pcre" "sregex" "rx")
+                           '(read string pcre sregex rx)
                            nil t "" nil (symbol-name reb-re-syntax)))))
-  (setq ad-return-value
-        (if (memq syntax '(read string pcre lisp-re sregex rx))
-            (let ((buffer (get-buffer reb-buffer)))
-              (setq reb-re-syntax syntax)
-              (when buffer
-                (with-current-buffer reb-target-buffer
-                  (cl-case syntax
-                    ((rx)
-                     (setq reb-regexp-src
-                           (format "'%S"
-                                   (rxt-elisp-to-rx reb-regexp))))
-                    ((pcre)
-                     (setq reb-regexp-src
-                           (rxt-elisp-to-pcre reb-regexp)))))
-                (with-current-buffer buffer
-                  ;; Hack: prevent reb-auto-update from clobbering the
-                  ;; reb-regexp-src we just set
-                  (let ((inhibit-modification-hooks t))
-                    (reb-initialize-buffer)))))
-          (error "Invalid syntax: %s" syntax))))
+  (unless (memq syntax '(read string pcre lisp-re sregex rx))
+    (error "Invalid syntax: %s" syntax))
+  (let ((re-builder-buffer (get-buffer reb-buffer)))
+    (setq reb-re-syntax syntax)
+    (when re-builder-buffer
+      (with-current-buffer reb-target-buffer
+        (cl-case syntax
+          (rx
+           (let ((rx (rxt-elisp-to-rx reb-regexp)))
+             (setq reb-regexp-src
+                   (with-temp-buffer
+                     (insert "\n" "'")
+                     (rxt-print rx)
+                     (buffer-string)))))
+          (pcre
+           (setq reb-regexp-src (rxt-elisp-to-pcre reb-regexp)))))
+      (with-current-buffer re-builder-buffer
+        ;; Hack: prevent reb-auto-update from clobbering the
+        ;; reb-regexp-src we just set
+        (let ((inhibit-modification-hooks t))
+          (reb-initialize-buffer))
+        ;; Enable flag-toggling bindings for PCRE syntax
+        (rxt--re-builder-switch-pcre-mode)))))
 
 (defadvice reb-read-regexp
   (around rxt () activate compile)
@@ -3029,9 +3051,21 @@ in character classes as outside them."
               (prog1
                   (not (string= oldre re))
                 (setq reb-regexp re)
-                ;; Only update the source re for the lisp formats
+                ;; Update the source re if format requires translation
                 (when (or (reb-lisp-syntax-p) (eq reb-re-syntax 'pcre))
                   (setq reb-regexp-src re-src))))))))
+
+(define-minor-mode rxt--re-builder-pcre-mode
+    "Add keybindings for toggling PCRE flags to the RE Builder."
+  :initial nil
+  :lighter nil
+  :keymap 'rxt--toggle-flag-map)
+
+(defun rxt--re-builder-switch-pcre-mode ()
+  (rxt--re-builder-pcre-mode
+   (if (eq reb-re-syntax 'pcre) 1 0)))
+
+(add-hook 'reb-mode-hook #'rxt--re-builder-switch-pcre-mode)
 
 (provide 'rxt)
 (provide 'pcre2el)
