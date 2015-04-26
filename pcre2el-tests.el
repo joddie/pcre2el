@@ -89,14 +89,400 @@
 ;; POSSIBILITY OF SUCH DAMAGE.
 
 
-
 ;;;; Code:
-
-;; Simple pcre->elisp tests
-
 (require 'pcre2el)
 (require 'ert)
 (require 'cl-lib)
+
+
+;;; Tests for source-location
+(ert-deftest rxt-location ()
+  (let ((dummy-1 (cl-gensym))
+        (dummy-2 (cl-gensym))
+        (location-1 (make-rxt-location :source "dummy 1"
+                                       :start 2
+                                       :end 5))
+        (location-2 (make-rxt-location :source "dummy 2"
+                                       :start 0
+                                       :end 4)))
+    (setf (rxt-location dummy-1) location-1)
+    (setf (rxt-location dummy-2) location-2)
+    (should (eq (rxt-location dummy-1) location-1))
+    (should (eq (rxt-location dummy-2) location-2))))
+
+(ert-deftest rxt-location-text ()
+  (let ((location-1 (make-rxt-location :source "dummy 1"
+                                       :start 2
+                                       :end 5))
+        (location-2 (make-rxt-location :source "dummy 2"
+                                       :start 0
+                                       :end 4)))
+    (should (string= (rxt-location-text location-1) "mmy"))
+    (should (string= (rxt-location-text location-2) "dumm"))))
+
+(ert-deftest rxt-with-source-location ()
+  "Test recording of source location information"
+  (let ((string "dummy string") 
+        (dummy-1 (cl-gensym))
+        (dummy-2 (cl-gensym))
+        value-1 value-2)
+    (let ((rxt-source-text-string string))
+      (with-temp-buffer
+        (insert rxt-source-text-string)
+        (goto-char (point-min))
+        (setq value-1
+              (rxt-with-source-location
+               (goto-char (point-max))
+               dummy-1)))
+
+      (with-temp-buffer
+        (insert rxt-source-text-string)
+        (goto-char (point-min))
+        (setq value-2
+              (rxt-with-source-location
+               (forward-word)
+               dummy-2))))
+    
+    (should (eq value-1 dummy-1))
+    (should (eq value-2 dummy-2))
+    (let ((location (rxt-location value-1)))
+      (should (not (null location)))
+      (should (string= (rxt-location-source location) string))
+      (should (= 0 (rxt-location-start location)))
+      (should (= (length string) (rxt-location-end location)))
+      (should (string= string (rxt-location-text location))))
+
+    (let ((location (rxt-location value-2)))
+      (should (not (null location)))
+      (should (string= (rxt-location-source location) string))
+      (should (= 0 (rxt-location-start location)))
+      (should (= 5 (rxt-location-end location)))
+      (should (string= "dummy" (rxt-location-text location))))))
+
+
+;;; Syntax-tree tests
+(ert-deftest rxt-trivial-p ()
+  (should (rxt-trivial-p (rxt-empty-string))))
+
+(ert-deftest rxt-string-concat ()
+  (let* ((source "dummy string")
+         (string-1 (rxt-string "dummy "))
+         (string-2 (rxt-string "string")))
+    
+    (should (equal (rxt-string source)
+                   (rxt-string-concat string-1 string-2)))
+    
+    (setf (rxt-location string-1)
+          (make-rxt-location :source source :start 0 :end 6))
+    (setf (rxt-location string-2)
+          (make-rxt-location :source source :start 6 :end 12))
+    
+    (let ((result (rxt-string-concat string-1 string-2)))
+      (should (equal (rxt-string source) result))
+      (let ((location (rxt-location result)))
+        (should (not (null location)))
+        (should (eq source (rxt-location-source location)))
+        (should (= 0 (rxt-location-start location)))
+        (should (= 12 (rxt-location-end location)))))))
+
+;; Sequence constructor
+(ert-deftest rxt-seq-empty ()
+  (should (equal (rxt-empty-string) (rxt-seq))))
+
+(ert-deftest rxt-seq-singleton ()
+  (let* ((string (rxt-string "sample string"))
+         (sequence (rxt-seq string)))
+    (should (equal string sequence))))
+
+(ert-deftest rxt-seq-join-strings ()
+  ;; Strings with the same case-folding setting are folded together
+  (let* ((string-1 (rxt-string "first"))
+         (string-2 (rxt-string "second"))
+         (string-3 (rxt-string "third"))
+         (sequence (rxt-seq string-1 string-2 string-3)))
+    (should (equal sequence
+                   (rxt-string (concat (rxt-string-chars string-1)
+                                       (rxt-string-chars string-2)
+                                       (rxt-string-chars string-3))))))
+
+  ;; Strings with different case-folding behaviours are not folded
+  ;; together
+  (let* ((string-1 (rxt-string "case-sensitive" nil))
+         (string-2 (rxt-string "case-insensitive" t))
+         (sequence (rxt-seq string-1 string-2)))
+    (should (rxt-seq-p sequence))
+    (should (equal (rxt-seq-elts sequence)
+                   (list string-1 string-2)))))
+
+(ert-deftest rxt-seq-flatten-sequences ()
+  (let* ((sequence-1
+          (rxt-seq (rxt-bol)
+                   (rxt-string "word")))
+         (nested-sequence
+          (rxt-seq sequence-1
+                   (rxt-anything)
+                   (rxt-eol)))
+         (flat-sequence
+          (rxt-seq (rxt-bol)
+                   (rxt-string "word")
+                   (rxt-anything)
+                   (rxt-eol))))
+    (should (equal nested-sequence flat-sequence)))
+
+  (let* ((sequence (rxt-seq (rxt-bol)
+                            (rxt-anything)
+                            (rxt-eol)))
+         (nested-1 (rxt-seq sequence))
+         (nested-2 (rxt-seq nested-1)))
+    (should (equal sequence nested-1))
+    (should (equal sequence nested-2))))
+
+(ert-deftest rxt-seq-remove-empty ()
+  (let ((sequence-1 (rxt-seq (rxt-bow)
+                             (rxt-string "lorem ipsum")
+                             (rxt-anything)
+                             (rxt-eow)))
+        (sequence-2 (rxt-seq (rxt-empty-string)
+                             (rxt-empty-string)
+                             (rxt-bow)
+                             (rxt-seq)
+                             (rxt-string "lorem ipsum")
+                             (rxt-seq)
+                             (rxt-empty-string)
+                             (rxt-anything)
+                             (rxt-empty-string)
+                             (rxt-eow))))
+    (should (equal sequence-1 sequence-2))))
+
+;;; Choice constructor
+(ert-deftest rxt-choice ()
+  ;; Singleton elements should be returned unchanged
+  (let ((element (rxt-string "example")))
+    (should (equal (rxt-choice element) element)))
+
+  ;; Nested choices should be flattened
+  (should (equal (rxt-choice
+                  (rxt-choice
+                   (rxt-string "first")
+                   (rxt-string "second"))
+                  (rxt-string "third"))
+                 (rxt-choice
+                  (rxt-string "first")
+                  (rxt-string "second")
+                  (rxt-string "third"))))
+
+  ;; Char sets with the same case-folding behaviour should be folded together
+  (let* ((char-set-1
+          (make-rxt-char-set-union :chars '(?a ?q ?x)))
+         (char-set-2
+          (make-rxt-char-set-union :chars '(?1 ?9 ?5)))
+         (choice
+          (rxt-choice char-set-1 char-set-2)))
+    (should (rxt-char-set-union-p choice))
+    (should
+     (rxt--char-set-equal
+      choice
+      (make-rxt-char-set-union :chars '(?a ?q ?x ?1 ?9 ?5)))))
+
+  ;; Char-sets with different case-folding behaviour should NOT be
+  ;; folded together
+  (let* ((char-set-1
+          (make-rxt-char-set-union :chars '(?a ?b ?c)
+                                   :case-fold nil))
+         (char-set-2
+          (make-rxt-char-set-union :chars '(?1 ?2 ?3)
+                                   :case-fold t))
+         (choice
+          (rxt-choice char-set-1 char-set-2)))
+    (should (rxt-choice-p choice))))
+
+;;; Repeat
+
+;; FIXME
+
+;;; Character sets and case-folding
+(defun rxt--set-equal (a b)
+  (null (cl-set-exclusive-or a b :test 'equal)))
+
+(defun rxt--char-set-equal (a b)
+  (and (rxt--set-equal (rxt-char-set-union-chars a)
+                       (rxt-char-set-union-chars b))
+       (rxt--set-equal (rxt-char-set-union-ranges a)
+                       (rxt-char-set-union-ranges b))
+       (rxt--set-equal (rxt-char-set-union-classes a)
+                       (rxt-char-set-union-classes b))
+       (eq (rxt-char-set-union-case-fold a)
+           (rxt-char-set-union-case-fold b))))
+
+(ert-deftest rxt--all-char-set-union-chars ()
+  (should
+   (rxt--set-equal
+    (rxt--all-char-set-union-chars
+     (make-rxt-char-set-union :chars '(?a ?x ?t)))
+    '(?a ?x ?t)))
+
+  (should
+   (rxt--set-equal
+    (rxt--all-char-set-union-chars
+     (make-rxt-char-set-union :chars '(?a ?x ?t)
+                              :ranges '((?0 . ?3) (?d . ?f))))
+    '(?a ?x ?t ?0 ?1 ?2 ?3 ?d ?e ?f))))
+
+(ert-deftest rxt--remove-redundant-chars ()
+  (should
+   (rxt--set-equal (rxt--remove-redundant-chars '(?a ?q ?t ?\n) nil)
+                   '(?a ?q ?t ?\n)))
+
+  (should
+   (rxt--set-equal (rxt--remove-redundant-chars '(?a ?b ?c ?0 ?1 ?2) '(digit))
+                   '(?a ?b ?c)))
+
+  (should
+   (rxt--set-equal (rxt--remove-redundant-chars '(?a ?b ?c ?0 ?1 ?2) '(letter))
+                   '(?0 ?1 ?2)))
+
+  (should
+   (rxt--set-equal (rxt--remove-redundant-chars '(?a ?b ?c ?0 ?1 ?2) '(space))
+                   '(?a ?b ?c ?0 ?1 ?2))))
+
+(ert-deftest rxt--simplify-char-set ()
+  ;; [abcdq-z[:digit:]] is unchanged
+  (let ((char-set
+         (rxt--simplify-char-set
+          (make-rxt-char-set-union :chars '(?a ?b ?c ?d)
+                                   :ranges '((?q . ?z))
+                                   :classes '(digit)
+                                   ))))
+    (should
+     (rxt--char-set-equal char-set
+                          (rxt--simplify-char-set char-set))))
+
+  ;; [abcd0-7[:alnum:]] => [[:alnum:]]
+  (should
+   (rxt--char-set-equal
+    (rxt--simplify-char-set
+     (make-rxt-char-set-union :chars '(?a ?b ?c ?d)
+                              :ranges '((?0 . ?7))
+                              :classes '(alnum)))
+    (make-rxt-char-set-union :classes '(alnum))))
+
+  ;; [abcda-z0-9] => [a-z0-9]
+  (should
+   (rxt--char-set-equal
+    (rxt--simplify-char-set
+     (make-rxt-char-set-union :chars '(?a ?b ?c ?d)
+                              :ranges '((?a . ?z) (?0 . ?9))))
+    (make-rxt-char-set-union :ranges '((?a . ?z) (?0 . ?9)))))
+
+  ;; [g-za-f0-95-9] => [a-z0-9]
+  (should
+   (rxt--char-set-equal
+    (rxt--simplify-char-set
+     (make-rxt-char-set-union :ranges '((?g . ?z) (?a . ?f)
+                                        (?0 . ?9) (?5 . ?9))))
+    (make-rxt-char-set-union :ranges '((?a . ?z) (?0 . ?9)))))
+
+  ;; Two-character ranges are unchanged
+  (let ((char-set (make-rxt-char-set-union :chars '(?a ?b ?8 ?9))))
+    (should
+     (rxt--char-set-equal
+      char-set
+      (rxt--simplify-char-set char-set)))))
+
+(ert-deftest rxt--simplify-char-set-case-fold ()
+  ;; /[[:digit:][:space:]]/i => [[:digit:][:space:]]
+  (let ((char-set (make-rxt-char-set-union :classes '(digit space))))
+    (should (rxt--char-set-equal
+             char-set
+             (rxt--simplify-char-set char-set t))))
+
+  ;; /[ad]/i => [ADad]
+  (should (rxt--char-set-equal
+           (rxt--simplify-char-set (make-rxt-char-set-union :chars '(?a ?d)) t)
+           (make-rxt-char-set-union :chars '(?a ?d ?A ?D))))
+
+  ;; /[abcd]/i => [A-Da-d]
+  (should (rxt--char-set-equal
+           (rxt--simplify-char-set
+            (make-rxt-char-set-union :chars '(?a ?b ?c ?d)) t)
+           (make-rxt-char-set-union :ranges '((?a . ?d) (?A . ?D)))))
+
+  ;; /[W-c]/i => [A-CW-ca-c]
+  (should (rxt--char-set-equal
+           (rxt--simplify-char-set
+            (make-rxt-char-set-union :ranges '((?W . ?c))) t)
+           (make-rxt-char-set-union :ranges '((?W . ?c) (?A . ?C) (?w . ?z))))))
+
+(ert-deftest rxt--extract-ranges ()
+  (should (equal (rxt--extract-ranges '()) '()))
+  (should (equal (rxt--extract-ranges '(1)) '((1 . 1))))
+  (should (equal (rxt--extract-ranges '(1 1)) '((1 . 1))))
+  (should (equal (rxt--extract-ranges '(1 1 1)) '((1 . 1))))
+  (should (equal (rxt--extract-ranges '(1 2)) '((1 . 2))))
+  (should (equal (rxt--extract-ranges '(1 2 3)) '((1 . 3))))
+  (should (equal (rxt--extract-ranges '(1 2 3 4)) '((1 . 4))))
+  (should (equal (rxt--extract-ranges '(1 2 3 4 5)) '((1 . 5))))
+  (should (equal (rxt--extract-ranges '(0 1)) '((0 . 1))))
+  (should (equal (rxt--extract-ranges '(0 0)) '((0 . 0))))
+  (should (equal (rxt--extract-ranges '(0 0 0)) '((0 . 0))))
+  (should (equal (rxt--extract-ranges '(-2 -1 0 1 2 3 4)) '((-2 . 4))))
+  (should (equal (rxt--extract-ranges '(0 3 4 5)) '((0 . 0) (3 . 5))))
+  (should (equal (rxt--extract-ranges '(0 0 0 3 3 4 5 0 3 4 5)) '((0 . 0) (3 . 5))))
+  (should (equal (rxt--extract-ranges '(10 9 8 7 6 5)) '((5 . 10)))))
+
+(ert-deftest rxt-char-set-union-case-fold-1 ()
+  (should
+   (rxt--char-set-equal
+    (rxt-char-set-union
+     (make-rxt-char-set-union :chars '(?a) :case-fold t)
+     (make-rxt-char-set-union :case-fold t))
+    (make-rxt-char-set-union :chars '(?a) :case-fold t)))
+
+  (should
+   (rxt--char-set-equal
+    (rxt-char-set-union
+     ?a
+     (make-rxt-char-set-union :case-fold t))
+    (make-rxt-char-set-union :chars '(?a) :case-fold t)))
+
+  (should
+   (rxt--char-set-equal
+    (rxt-char-set-union
+     "a"
+     (make-rxt-char-set-union :case-fold t))
+    (make-rxt-char-set-union :chars '(?a) :case-fold t)))
+
+  (should
+   (rxt--char-set-equal
+    (rxt-char-set-union
+     (make-rxt-char-set-union :case-fold t)
+     (rxt-string "a"))
+    (make-rxt-char-set-union :chars '(?a) :case-fold t))))
+
+
+;;; PCRE parsing tests
+(ert-deftest rxt-parse-pcre-simple-string ()
+  (let* ((string "simple string")
+         (parse (rxt-parse-pcre string)))
+    (should (equal (rxt-string string) parse))
+    (should (equal (rxt-source-text parse) string))))
+
+(ert-deftest rxt-parse-pcre-quoted-string ()
+  (cl-flet ((pcre-quote (string) (concat "\\Q" string "\\E")))
+    (let* ((string "Simple string without metacharacters")
+           (re (pcre-quote string))
+           (parse (rxt-parse-pcre re)))
+      (should (equal (rxt-string string) parse))
+      (should (equal re (rxt-source-text parse))))
+
+    (let* ((string "String $ with (( ) regexp \\ special [a-z] characters")
+           (re (pcre-quote string))
+           (parse (rxt-parse-pcre re)))
+      (should (equal (rxt-string string) parse))
+      (should (equal re (rxt-source-text parse))))))
+
+
+;;; Simple pcre->elisp tests
 
 ;; Regexp quoting
 (ert-deftest rxt-pcre-special-chars ()
@@ -233,6 +619,102 @@
 
 
 
+;; Pretty-printing / explain tests
+
+(ert-deftest rxt--print ()
+  ;; Test that lists and dotted lists are printed correctly
+  (cl-flet ((print-to-string (form)
+              (with-temp-buffer
+                (rxt-print form)
+                (buffer-string))))
+    (should (string= (print-to-string '(normal list))
+                     "(normal list)"))
+    (should (string= (print-to-string '(short-list))
+                     "(short-list)"))
+    (should (string= (print-to-string '(dotted . pair))
+                     "(dotted . pair)"))
+    (should (string= (print-to-string '(longer dotted . list))
+                     "(longer dotted . list)"))
+
+    ;; Test correct printing of some `rx' forms
+    (should (string= (print-to-string '(? (any digit)))
+                     "(? (any digit))"))
+    (should (string= (print-to-string '(?? (any digit)))
+                     "(?? (any digit))"))
+    (should (string= (print-to-string '(*? "some regexp"))
+                     "(*? \"some regexp\")"))
+    (should (string= (print-to-string '(+? "some regexp"))
+                     "(+? \"some regexp\")"))
+    (should (string= (print-to-string '(any ?a ?q ?z))
+                     "(any ?a ?q ?z)"))
+    (should (string= (print-to-string '(any (?a . ?z) (?0 . ?3)))
+                     "(any (?a . ?z) (?0 . ?3))"))
+    (should (string= (print-to-string '(repeat 2 5 ?x))
+                     "(repeat 2 5 ?x)"))
+    (should (string= (print-to-string '(repeat 5 (any digit)))
+                     "(repeat 5 (any digit))"))))
+
+(ert-deftest rxt--propertize-whitespace ()
+  (let ((string (rxt--propertize-whitespace "\n\t\f\r")))
+    (should (equal (get-text-property 0 'display string) "\\n"))
+    (should (equal (get-text-property 1 'display string) "\\t"))
+    (should (equal (get-text-property 2 'display string) "\\f"))
+    (should (equal (get-text-property 3 'display string) "\\r")))
+
+  (let ((string (rxt--propertize-whitespace "String\n\twith\n\tnewlines and tabs")))
+    (should (equal (get-text-property 6 'display string) "\\n"))
+    (should (equal (get-text-property 7 'display string) "\\t"))
+    (should (equal (get-text-property 12 'display string) "\\n"))
+    (should (equal (get-text-property 13 'display string) "\\t"))))
+
+
+
+;;;; Test PCRE reading
+
+(ert-deftest rxt-read-delimited-pcre ()
+  (cl-flet ((read-pcre-from-string (string)
+              (with-temp-buffer
+                (save-excursion (insert string))
+                (rxt-read-delimited-pcre))))
+    (should (string= (read-pcre-from-string "/[a-z]/")
+                     "[a-z]"))
+    (should (string= (read-pcre-from-string "  m/\\d+/")
+                     "\\d+"))
+    (should (string= (read-pcre-from-string "    qr/embedded\\/delimiters/")
+                     "embedded\\/delimiters"))
+    (should (string= (read-pcre-from-string
+                      "    s/several\\/embedded\\/delimiters/replacement/")
+                     "several\\/embedded\\/delimiters"))
+    (should (string= (read-pcre-from-string
+                      "    s/several\\/embedded\\/delimiters/replacement\\/with\\/delimiters/")
+                     "several\\/embedded\\/delimiters"))
+
+    (let ((pcre (read-pcre-from-string "/regexp/")))
+      (should (string= pcre "regexp")))
+
+    (let ((pcre (read-pcre-from-string "m/regexp/s")))
+      (should (string= pcre "(?s)regexp")))
+
+    (let ((pcre (read-pcre-from-string "s/regexp/replacement/sx")))
+      (should (string= pcre "(?sx)regexp")))
+
+    (let ((pcre (read-pcre-from-string "s/regexp/embedded\\/delimiters/x")))
+      (should (string= pcre "(?x)regexp")))))
+
+;; (ert-deftest rxt--read-pcre ()
+;;   (let* ((unread-command-events
+;;           (string-to-list "regexp text\C-ci\C-cs\C-j"))
+;;          (result
+;;           (rxt--read-pcre "Test: ")))
+;;     (should (string= result "(?si)regexp text")))
+
+;;   (let* ((unread-command-events
+;;           (string-to-list "\C-ciregexp text\C-ci\C-j"))
+;;          (result
+;;           (rxt--read-pcre "Test: ")))
+;;     (should (string= result "regexp text"))))
+
+
 ;; The following tests are adapted from the first set of tests
 ;; ("testinput1") in the PCRE library's test suite: see
 ;; http://www.pcre.org/ and the copyright notice at the beginning of
@@ -287,7 +769,7 @@
 
 (ert-deftest rxt-pcre-test-00003 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "The quick brown fox" "i")))
     (rxt-match-test regexp "the quick brown fox"
@@ -717,7 +1199,7 @@
 
 (ert-deftest rxt-pcre-test-00026 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "([\\da-f:]+)$" "i")))
     (rxt-match-test regexp "0abc"
@@ -844,7 +1326,7 @@
 
 (ert-deftest rxt-pcre-test-00034 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "^[\\da-f](\\.[\\da-f])*$" "i")))
     (rxt-match-test regexp "a.b.c.d"
@@ -1567,7 +2049,7 @@
 
 (ert-deftest rxt-pcre-test-00089 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "([^.]*)\\.([^:]*):[T ]+(.*)" "i")))
     (rxt-match-test regexp "track1.title:TBlah blah blah"
@@ -1576,7 +2058,7 @@
 
 (ert-deftest rxt-pcre-test-00090 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "([^.]*)\\.([^:]*):[t ]+(.*)" "i")))
     (rxt-match-test regexp "track1.title:TBlah blah blah"
@@ -1596,7 +2078,7 @@
 
 (ert-deftest rxt-pcre-test-00092 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "^[W-c]+$" "i")))
     (rxt-match-test regexp "WXY_^abc"
@@ -1607,7 +2089,7 @@
 
 (ert-deftest rxt-pcre-test-00093 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "^[\\x3f-\\x5F]+$" "i")))
     (rxt-match-test regexp "WXY_^abc"
@@ -1779,8 +2261,11 @@
 
 
 (ert-deftest rxt-pcre-test-00108 nil
+  :expected-result :failed
+  ;; The current method of faking case-folding behavior cannot make
+  ;; backreferences behave case-insensitively.
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "(abc)\\1" "i")))
     (rxt-match-test regexp "abcabc"
@@ -2039,7 +2524,7 @@
 
 (ert-deftest rxt-pcre-test-00132 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "[^a]" "i")))
     (rxt-match-test regexp "Abc"
@@ -2057,7 +2542,7 @@
 
 (ert-deftest rxt-pcre-test-00134 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "[^a]+" "i")))
     (rxt-match-test regexp "AAAaAbc"
@@ -2143,7 +2628,7 @@
 
 (ert-deftest rxt-pcre-test-00141 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "[^a]" "i")))
     (rxt-match-test regexp "aaaabcd"
@@ -2165,7 +2650,7 @@
 
 (ert-deftest rxt-pcre-test-00143 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "[^az]" "i")))
     (rxt-match-test regexp "aaaabcd"
@@ -2230,7 +2715,6 @@
 
 
 (ert-deftest rxt-pcre-test-00149 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
@@ -2241,7 +2725,7 @@
 
 (ert-deftest rxt-pcre-test-00150 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "\\b(foo)\\s+(\\w+)" "i")))
     (rxt-match-test regexp "Food is on the foo table"
@@ -2776,7 +3260,6 @@
 
 
 (ert-deftest rxt-pcre-test-00198 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
@@ -2786,7 +3269,6 @@
 
 
 (ert-deftest rxt-pcre-test-00199 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
@@ -2796,7 +3278,6 @@
 
 
 (ert-deftest rxt-pcre-test-00200 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
@@ -2992,7 +3473,7 @@
 
 (ert-deftest rxt-pcre-test-00219 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "<tr([\\w\\W\\s\\d][^<>]{0,})><TD([\\w\\W\\s\\d][^<>]{0,})>([\\d]{0,}\\.)(.*)((<BR>([\\w\\W\\s\\d][^<>]{0,})|[\\s]{0,}))<\\/a><\\/TD><TD([\\w\\W\\s\\d][^<>]{0,})>([\\w\\W\\s\\d][^<>]{0,})<\\/TD><TD([\\w\\W\\s\\d][^<>]{0,})>([\\w\\W\\s\\d][^<>]{0,})<\\/TD><\\/TR>" "is")))
     (rxt-match-test regexp "<TR BGCOLOR='#DBE9E9'><TD align=left valign=top>43.<a href='joblist.cfm?JobID=94 6735&Keyword='>Word Processor<BR>(N-1286)</a></TD><TD align=left valign=top>Lega lstaff.com</TD><TD align=left valign=top>CA - Statewide</TD></TR>"
@@ -3338,9 +3819,8 @@
 
 
 (ert-deftest rxt-pcre-test-00249 nil
-  :expected-result :failed
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "a(?-i)b" "i")))
     (rxt-match-test regexp "ab"
@@ -3377,7 +3857,6 @@
 
 
 (ert-deftest rxt-pcre-test-00252 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
@@ -3396,7 +3875,6 @@
 
 
 (ert-deftest rxt-pcre-test-00253 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
@@ -3412,7 +3890,6 @@
 
 
 (ert-deftest rxt-pcre-test-00254 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
@@ -3442,9 +3919,8 @@
 
 
 (ert-deftest rxt-pcre-test-00256 nil
-  :expected-result :failed
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "(?s-i:more.*than).*million" "i")))
     (rxt-match-test regexp "more than million"
@@ -3459,9 +3935,8 @@
 
 
 (ert-deftest rxt-pcre-test-00257 nil
-  :expected-result :failed
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "(?:(?s-i)more.*than).*million" "i")))
     (rxt-match-test regexp "more than million"
@@ -3671,7 +4146,6 @@
 
 
 (ert-deftest rxt-pcre-test-00270 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
@@ -3911,7 +4385,6 @@
 
 
 (ert-deftest rxt-pcre-test-00287 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
@@ -3933,7 +4406,6 @@
 
 
 (ert-deftest rxt-pcre-test-00288 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
@@ -3954,7 +4426,6 @@
 
 
 (ert-deftest rxt-pcre-test-00289 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
@@ -3978,7 +4449,6 @@
 
 
 (ert-deftest rxt-pcre-test-00290 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
@@ -5221,7 +5691,7 @@
 
 (ert-deftest rxt-pcre-test-00412 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "abc" "i")))
     (rxt-match-test regexp "ABC"
@@ -5239,7 +5709,7 @@
 
 (ert-deftest rxt-pcre-test-00413 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "ab*c" "i")))
     (rxt-match-test regexp "ABC"
@@ -5248,7 +5718,7 @@
 
 (ert-deftest rxt-pcre-test-00414 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "ab*bc" "i")))
     (rxt-match-test regexp "ABC"
@@ -5259,7 +5729,7 @@
 
 (ert-deftest rxt-pcre-test-00415 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "ab*?bc" "i")))
     (rxt-match-test regexp "ABBBBC"
@@ -5268,7 +5738,7 @@
 
 (ert-deftest rxt-pcre-test-00416 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "ab{0,}?bc" "i")))
     (rxt-match-test regexp "ABBBBC"
@@ -5277,7 +5747,7 @@
 
 (ert-deftest rxt-pcre-test-00417 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "ab+?bc" "i")))
     (rxt-match-test regexp "ABBC"
@@ -5286,7 +5756,7 @@
 
 (ert-deftest rxt-pcre-test-00418 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "ab+bc" "i")))
     (rxt-match-test regexp "*** Failers" 'nil)
@@ -5296,14 +5766,14 @@
 
 (ert-deftest rxt-pcre-test-00419 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "ab{1,}bc" "i")))))
 
 
 (ert-deftest rxt-pcre-test-00420 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "ab+bc" "i")))
     (rxt-match-test regexp "ABBBBC"
@@ -5312,7 +5782,7 @@
 
 (ert-deftest rxt-pcre-test-00421 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "ab{1,}?bc" "i")))
     (rxt-match-test regexp "ABBBBC"
@@ -5321,7 +5791,7 @@
 
 (ert-deftest rxt-pcre-test-00422 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "ab{1,3}?bc" "i")))
     (rxt-match-test regexp "ABBBBC"
@@ -5330,7 +5800,7 @@
 
 (ert-deftest rxt-pcre-test-00423 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "ab{3,4}?bc" "i")))
     (rxt-match-test regexp "ABBBBC"
@@ -5339,7 +5809,7 @@
 
 (ert-deftest rxt-pcre-test-00424 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "ab{4,5}?bc" "i")))
     (rxt-match-test regexp "*** Failers" 'nil)
@@ -5349,7 +5819,7 @@
 
 (ert-deftest rxt-pcre-test-00425 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "ab??bc" "i")))
     (rxt-match-test regexp "ABBC"
@@ -5360,7 +5830,7 @@
 
 (ert-deftest rxt-pcre-test-00426 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "ab{0,1}?bc" "i")))
     (rxt-match-test regexp "ABC"
@@ -5369,14 +5839,14 @@
 
 (ert-deftest rxt-pcre-test-00427 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "ab??bc" "i")))))
 
 
 (ert-deftest rxt-pcre-test-00428 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "ab??c" "i")))
     (rxt-match-test regexp "ABC"
@@ -5385,7 +5855,7 @@
 
 (ert-deftest rxt-pcre-test-00429 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "ab{0,1}?c" "i")))
     (rxt-match-test regexp "ABC"
@@ -5394,7 +5864,7 @@
 
 (ert-deftest rxt-pcre-test-00430 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "^abc$" "i")))
     (rxt-match-test regexp "ABC"
@@ -5406,7 +5876,7 @@
 
 (ert-deftest rxt-pcre-test-00431 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "^abc" "i")))
     (rxt-match-test regexp "ABCC"
@@ -5415,14 +5885,14 @@
 
 (ert-deftest rxt-pcre-test-00432 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "^abc$" "i")))))
 
 
 (ert-deftest rxt-pcre-test-00433 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "abc$" "i")))
     (rxt-match-test regexp "AABC"
@@ -5431,7 +5901,7 @@
 
 (ert-deftest rxt-pcre-test-00434 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "^" "i")))
     (rxt-match-test regexp "ABC"
@@ -5440,7 +5910,7 @@
 
 (ert-deftest rxt-pcre-test-00435 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "$" "i")))
     (rxt-match-test regexp "ABC"
@@ -5449,7 +5919,7 @@
 
 (ert-deftest rxt-pcre-test-00436 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "a.c" "i")))
     (rxt-match-test regexp "ABC"
@@ -5460,7 +5930,7 @@
 
 (ert-deftest rxt-pcre-test-00437 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "a.*?c" "i")))
     (rxt-match-test regexp "AXYZC"
@@ -5469,7 +5939,7 @@
 
 (ert-deftest rxt-pcre-test-00438 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "a.*c" "i")))
     (rxt-match-test regexp "*** Failers" 'nil)
@@ -5480,7 +5950,7 @@
 
 (ert-deftest rxt-pcre-test-00439 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "a[bc]d" "i")))
     (rxt-match-test regexp "ABD"
@@ -5489,7 +5959,7 @@
 
 (ert-deftest rxt-pcre-test-00440 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "a[b-d]e" "i")))
     (rxt-match-test regexp "ACE"
@@ -5501,7 +5971,7 @@
 
 (ert-deftest rxt-pcre-test-00441 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "a[b-d]" "i")))
     (rxt-match-test regexp "AAC"
@@ -5510,7 +5980,7 @@
 
 (ert-deftest rxt-pcre-test-00442 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "a[-b]" "i")))
     (rxt-match-test regexp "A-"
@@ -5519,7 +5989,7 @@
 
 (ert-deftest rxt-pcre-test-00443 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "a[b-]" "i")))
     (rxt-match-test regexp "A-"
@@ -5528,7 +5998,7 @@
 
 (ert-deftest rxt-pcre-test-00444 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "a]" "i")))
     (rxt-match-test regexp "A]"
@@ -5537,7 +6007,7 @@
 
 (ert-deftest rxt-pcre-test-00445 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "a[]]b" "i")))
     (rxt-match-test regexp "A]B"
@@ -5546,7 +6016,7 @@
 
 (ert-deftest rxt-pcre-test-00446 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "a[^bc]d" "i")))
     (rxt-match-test regexp "AED"
@@ -5555,7 +6025,7 @@
 
 (ert-deftest rxt-pcre-test-00447 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "a[^-b]c" "i")))
     (rxt-match-test regexp "ADC"
@@ -5567,7 +6037,7 @@
 
 (ert-deftest rxt-pcre-test-00448 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "a[^]b]c" "i")))
     (rxt-match-test regexp "ADC"
@@ -5576,7 +6046,7 @@
 
 (ert-deftest rxt-pcre-test-00449 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "ab|cd" "i")))
     (rxt-match-test regexp "ABC"
@@ -5587,7 +6057,7 @@
 
 (ert-deftest rxt-pcre-test-00450 nil 
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "()ef" "i")))
     (rxt-match-test regexp "DEF"
@@ -5596,7 +6066,7 @@
 
 (ert-deftest rxt-pcre-test-00451 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "$b" "i")))
     (rxt-match-test regexp "*** Failers" 'nil)
@@ -5606,7 +6076,7 @@
 
 (ert-deftest rxt-pcre-test-00452 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "a\\(b" "i")))
     (rxt-match-test regexp "A(B"
@@ -5615,7 +6085,7 @@
 
 (ert-deftest rxt-pcre-test-00453 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "a\\(*b" "i")))
     (rxt-match-test regexp "AB"
@@ -5626,7 +6096,7 @@
 
 (ert-deftest rxt-pcre-test-00454 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "a\\\\b" "i")))
     (rxt-match-test regexp "AB" 'nil)))
@@ -5634,7 +6104,7 @@
 
 (ert-deftest rxt-pcre-test-00455 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "((a))" "i")))
     (rxt-match-test regexp "ABC"
@@ -5643,7 +6113,7 @@
 
 (ert-deftest rxt-pcre-test-00456 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "(a)b(c)" "i")))
     (rxt-match-test regexp "ABC"
@@ -5652,7 +6122,7 @@
 
 (ert-deftest rxt-pcre-test-00457 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "a+b+c" "i")))
     (rxt-match-test regexp "AABBABC"
@@ -5661,7 +6131,7 @@
 
 (ert-deftest rxt-pcre-test-00458 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "a{1,}b{1,}c" "i")))
     (rxt-match-test regexp "AABBABC"
@@ -5670,7 +6140,7 @@
 
 (ert-deftest rxt-pcre-test-00459 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "a.+?c" "i")))
     (rxt-match-test regexp "ABCABC"
@@ -5679,7 +6149,7 @@
 
 (ert-deftest rxt-pcre-test-00460 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "a.*?c" "i")))
     (rxt-match-test regexp "ABCABC"
@@ -5689,7 +6159,7 @@
 (ert-deftest rxt-pcre-test-00461 nil
   :expected-result :failed
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "a.{0,5}?c" "i")))
     (rxt-match-test regexp "ABCABC"
@@ -5698,7 +6168,7 @@
 
 (ert-deftest rxt-pcre-test-00462 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "(a+|b)*" "i")))
     (rxt-match-test regexp "AB"
@@ -5707,7 +6177,7 @@
 
 (ert-deftest rxt-pcre-test-00463 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "(a+|b){0,}" "i")))
     (rxt-match-test regexp "AB"
@@ -5716,7 +6186,7 @@
 
 (ert-deftest rxt-pcre-test-00464 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "(a+|b)+" "i")))
     (rxt-match-test regexp "AB"
@@ -5725,7 +6195,7 @@
 
 (ert-deftest rxt-pcre-test-00465 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "(a+|b){1,}" "i")))
     (rxt-match-test regexp "AB"
@@ -5734,7 +6204,7 @@
 
 (ert-deftest rxt-pcre-test-00466 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "(a+|b)?" "i")))
     (rxt-match-test regexp "AB"
@@ -5743,7 +6213,7 @@
 
 (ert-deftest rxt-pcre-test-00467 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "(a+|b){0,1}" "i")))
     (rxt-match-test regexp "AB"
@@ -5753,7 +6223,7 @@
 (ert-deftest rxt-pcre-test-00468 nil
   :expected-result :failed
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "(a+|b){0,1}?" "i")))
     (rxt-match-test regexp "AB"
@@ -5762,7 +6232,7 @@
 
 (ert-deftest rxt-pcre-test-00469 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "[^ab]*" "i")))
     (rxt-match-test regexp "CDE"
@@ -5771,21 +6241,21 @@
 
 (ert-deftest rxt-pcre-test-00470 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "abc" "i")))))
 
 
 (ert-deftest rxt-pcre-test-00471 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "a*" "i")))))
 
 
 (ert-deftest rxt-pcre-test-00472 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "([abc])*d" "i")))
     (rxt-match-test regexp "ABBBCD"
@@ -5794,7 +6264,7 @@
 
 (ert-deftest rxt-pcre-test-00473 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "([abc])*bcd" "i")))
     (rxt-match-test regexp "ABCD"
@@ -5803,7 +6273,7 @@
 
 (ert-deftest rxt-pcre-test-00474 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "a|b|c|d|e" "i")))
     (rxt-match-test regexp "E"
@@ -5812,7 +6282,7 @@
 
 (ert-deftest rxt-pcre-test-00475 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "(a|b|c|d|e)f" "i")))
     (rxt-match-test regexp "EF"
@@ -5821,7 +6291,7 @@
 
 (ert-deftest rxt-pcre-test-00476 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "abcd*efg" "i")))
     (rxt-match-test regexp "ABCDEFG"
@@ -5830,7 +6300,7 @@
 
 (ert-deftest rxt-pcre-test-00477 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "ab*" "i")))
     (rxt-match-test regexp "XABYABBBZ"
@@ -5841,7 +6311,7 @@
 
 (ert-deftest rxt-pcre-test-00478 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "(ab|cd)e" "i")))
     (rxt-match-test regexp "ABCDE"
@@ -5850,7 +6320,7 @@
 
 (ert-deftest rxt-pcre-test-00479 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "[abhgefdc]ij" "i")))
     (rxt-match-test regexp "HIJ"
@@ -5859,7 +6329,7 @@
 
 (ert-deftest rxt-pcre-test-00480 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "^(ab|cd)e" "i")))
     (rxt-match-test regexp "ABCDE" 'nil)))
@@ -5867,7 +6337,7 @@
 
 (ert-deftest rxt-pcre-test-00481 nil 
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "(abc|)ef" "i")))
     (rxt-match-test regexp "ABCDEF"
@@ -5876,7 +6346,7 @@
 
 (ert-deftest rxt-pcre-test-00482 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "(a|b)c*d" "i")))
     (rxt-match-test regexp "ABCD"
@@ -5885,7 +6355,7 @@
 
 (ert-deftest rxt-pcre-test-00483 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "(ab|ab*)bc" "i")))
     (rxt-match-test regexp "ABC"
@@ -5894,7 +6364,7 @@
 
 (ert-deftest rxt-pcre-test-00484 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "a([bc]*)c*" "i")))
     (rxt-match-test regexp "ABC"
@@ -5903,7 +6373,7 @@
 
 (ert-deftest rxt-pcre-test-00485 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "a([bc]*)(c*d)" "i")))
     (rxt-match-test regexp "ABCD"
@@ -5912,7 +6382,7 @@
 
 (ert-deftest rxt-pcre-test-00486 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "a([bc]+)(c*d)" "i")))
     (rxt-match-test regexp "ABCD"
@@ -5921,7 +6391,7 @@
 
 (ert-deftest rxt-pcre-test-00487 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "a([bc]*)(c+d)" "i")))
     (rxt-match-test regexp "ABCD"
@@ -5930,7 +6400,7 @@
 
 (ert-deftest rxt-pcre-test-00488 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "a[bcd]*dcdcde" "i")))
     (rxt-match-test regexp "ADCDCDE"
@@ -5939,7 +6409,7 @@
 
 (ert-deftest rxt-pcre-test-00489 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "a[bcd]+dcdcde" "i")))))
 
@@ -5947,7 +6417,7 @@
 (ert-deftest rxt-pcre-test-00490 nil
   :expected-result :failed
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "(ab|a)b*c" "i")))
     (rxt-match-test regexp "ABC"
@@ -5956,7 +6426,7 @@
 
 (ert-deftest rxt-pcre-test-00491 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "((a)(b)c)(d)" "i")))
     (rxt-match-test regexp "ABCD"
@@ -5965,7 +6435,7 @@
 
 (ert-deftest rxt-pcre-test-00492 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "[a-zA-Z_][a-zA-Z0-9_]*" "i")))
     (rxt-match-test regexp "ALPHA"
@@ -5974,7 +6444,7 @@
 
 (ert-deftest rxt-pcre-test-00493 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "^a(bc+|b[eh])g|.h$" "i")))
     (rxt-match-test regexp "ABH"
@@ -5983,7 +6453,7 @@
 
 (ert-deftest rxt-pcre-test-00494 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "(bc+d$|ef*g.|h?i(j|k))" "i")))
     (rxt-match-test regexp "EFFGZ"
@@ -6000,7 +6470,7 @@
 
 (ert-deftest rxt-pcre-test-00495 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "((((((((((a))))))))))" "i")))
     (rxt-match-test regexp "A"
@@ -6010,7 +6480,7 @@
 (ert-deftest rxt-pcre-test-00496 nil
   :expected-result :failed
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "((((((((((a))))))))))\\10" "i")))
     (rxt-match-test regexp "AA"
@@ -6019,7 +6489,7 @@
 
 (ert-deftest rxt-pcre-test-00497 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "(((((((((a)))))))))" "i")))
     (rxt-match-test regexp "A"
@@ -6028,7 +6498,7 @@
 
 (ert-deftest rxt-pcre-test-00498 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "(?:(?:(?:(?:(?:(?:(?:(?:(?:(a))))))))))" "i")))
     (rxt-match-test regexp "A"
@@ -6037,7 +6507,7 @@
 
 (ert-deftest rxt-pcre-test-00499 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "(?:(?:(?:(?:(?:(?:(?:(?:(?:(a|b|c))))))))))" "i")))
     (rxt-match-test regexp "C"
@@ -6046,7 +6516,7 @@
 
 (ert-deftest rxt-pcre-test-00500 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "multiple words of text" "i")))
     (rxt-match-test regexp "*** Failers" 'nil)
@@ -6056,7 +6526,7 @@
 
 (ert-deftest rxt-pcre-test-00501 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "multiple words" "i")))
     (rxt-match-test regexp "MULTIPLE WORDS, YEAH"
@@ -6065,7 +6535,7 @@
 
 (ert-deftest rxt-pcre-test-00502 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "(.*)c(.*)" "i")))
     (rxt-match-test regexp "ABCDE"
@@ -6074,7 +6544,7 @@
 
 (ert-deftest rxt-pcre-test-00503 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "\\((.*), (.*)\\)" "i")))
     (rxt-match-test regexp "(A, B)"
@@ -6083,14 +6553,14 @@
 
 (ert-deftest rxt-pcre-test-00504 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "[k]" "i")))))
 
 
 (ert-deftest rxt-pcre-test-00505 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "abcd" "i")))
     (rxt-match-test regexp "ABCD"
@@ -6099,7 +6569,7 @@
 
 (ert-deftest rxt-pcre-test-00506 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "a(bc)d" "i")))
     (rxt-match-test regexp "ABCD"
@@ -6108,7 +6578,7 @@
 
 (ert-deftest rxt-pcre-test-00507 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "a[-]?c" "i")))
     (rxt-match-test regexp "AC"
@@ -6117,7 +6587,7 @@
 
 (ert-deftest rxt-pcre-test-00508 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "(abc)\\1" "i")))
     (rxt-match-test regexp "ABCABC"
@@ -6126,7 +6596,7 @@
 
 (ert-deftest rxt-pcre-test-00509 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "([a-c]*)\\1" "i")))
     (rxt-match-test regexp "ABCABC"
@@ -6476,7 +6946,6 @@
 
 
 (ert-deftest rxt-pcre-test-00545 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
@@ -6486,7 +6955,6 @@
 
 
 (ert-deftest rxt-pcre-test-00546 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
@@ -6496,7 +6964,6 @@
 
 
 (ert-deftest rxt-pcre-test-00547 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
@@ -6506,7 +6973,6 @@
 
 
 (ert-deftest rxt-pcre-test-00548 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
@@ -6516,7 +6982,6 @@
 
 
 (ert-deftest rxt-pcre-test-00549 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
@@ -6527,7 +6992,6 @@
 
 
 (ert-deftest rxt-pcre-test-00550 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
@@ -6535,7 +6999,6 @@
 
 
 (ert-deftest rxt-pcre-test-00551 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
@@ -6545,7 +7008,6 @@
 
 
 (ert-deftest rxt-pcre-test-00552 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
@@ -6555,7 +7017,6 @@
 
 
 (ert-deftest rxt-pcre-test-00553 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
@@ -6565,7 +7026,6 @@
 
 
 (ert-deftest rxt-pcre-test-00554 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
@@ -6575,7 +7035,6 @@
 
 
 (ert-deftest rxt-pcre-test-00555 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
@@ -6586,7 +7045,6 @@
 
 
 (ert-deftest rxt-pcre-test-00556 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
@@ -6594,9 +7052,8 @@
 
 
 (ert-deftest rxt-pcre-test-00557 nil
-  :expected-result :failed
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "(?:(?-i)a)b" "i")))
     (rxt-match-test regexp "ab"
@@ -6604,9 +7061,8 @@
 
 
 (ert-deftest rxt-pcre-test-00558 nil
-  :expected-result :failed
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "((?-i)a)b" "i")))
     (rxt-match-test regexp "ab"
@@ -6614,9 +7070,8 @@
 
 
 (ert-deftest rxt-pcre-test-00559 nil
-  :expected-result :failed
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "(?:(?-i)a)b" "i")))
     (rxt-match-test regexp "aB"
@@ -6624,9 +7079,8 @@
 
 
 (ert-deftest rxt-pcre-test-00560 nil
-  :expected-result :failed
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "((?-i)a)b" "i")))
     (rxt-match-test regexp "aB"
@@ -6634,9 +7088,8 @@
 
 
 (ert-deftest rxt-pcre-test-00561 nil
-  :expected-result :failed
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "(?:(?-i)a)b" "i")))
     (rxt-match-test regexp "*** Failers" 'nil)
@@ -6646,17 +7099,15 @@
 
 
 (ert-deftest rxt-pcre-test-00562 nil
-  :expected-result :failed
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "((?-i)a)b" "i")))))
 
 
 (ert-deftest rxt-pcre-test-00563 nil
-  :expected-result :failed
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "(?:(?-i)a)b" "i")))
     (rxt-match-test regexp "aB"
@@ -6664,9 +7115,8 @@
 
 
 (ert-deftest rxt-pcre-test-00564 nil
-  :expected-result :failed
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "((?-i)a)b" "i")))
     (rxt-match-test regexp "aB"
@@ -6674,9 +7124,8 @@
 
 
 (ert-deftest rxt-pcre-test-00565 nil
-  :expected-result :failed
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "(?:(?-i)a)b" "i")))
     (rxt-match-test regexp "*** Failers" 'nil)
@@ -6685,17 +7134,15 @@
 
 
 (ert-deftest rxt-pcre-test-00566 nil
-  :expected-result :failed
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "((?-i)a)b" "i")))))
 
 
 (ert-deftest rxt-pcre-test-00567 nil
-  :expected-result :failed
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "(?-i:a)b" "i")))
     (rxt-match-test regexp "ab"
@@ -6703,9 +7150,8 @@
 
 
 (ert-deftest rxt-pcre-test-00568 nil
-  :expected-result :failed
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "((?-i:a))b" "i")))
     (rxt-match-test regexp "ab"
@@ -6713,9 +7159,8 @@
 
 
 (ert-deftest rxt-pcre-test-00569 nil
-  :expected-result :failed
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "(?-i:a)b" "i")))
     (rxt-match-test regexp "aB"
@@ -6723,9 +7168,8 @@
 
 
 (ert-deftest rxt-pcre-test-00570 nil
-  :expected-result :failed
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "((?-i:a))b" "i")))
     (rxt-match-test regexp "aB"
@@ -6733,9 +7177,8 @@
 
 
 (ert-deftest rxt-pcre-test-00571 nil
-  :expected-result :failed
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "(?-i:a)b" "i")))
     (rxt-match-test regexp "*** Failers" 'nil)
@@ -6744,17 +7187,15 @@
 
 
 (ert-deftest rxt-pcre-test-00572 nil
-  :expected-result :failed
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "((?-i:a))b" "i")))))
 
 
 (ert-deftest rxt-pcre-test-00573 nil
-  :expected-result :failed
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "(?-i:a)b" "i")))
     (rxt-match-test regexp "aB"
@@ -6762,9 +7203,8 @@
 
 
 (ert-deftest rxt-pcre-test-00574 nil
-  :expected-result :failed
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "((?-i:a))b" "i")))
     (rxt-match-test regexp "aB"
@@ -6772,9 +7212,8 @@
 
 
 (ert-deftest rxt-pcre-test-00575 nil
-  :expected-result :failed
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "(?-i:a)b" "i")))
     (rxt-match-test regexp "*** Failers" 'nil)
@@ -6783,17 +7222,15 @@
 
 
 (ert-deftest rxt-pcre-test-00576 nil
-  :expected-result :failed
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "((?-i:a))b" "i")))))
 
 
 (ert-deftest rxt-pcre-test-00577 nil
-  :expected-result :failed
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "((?-i:a.))b" "i")))
     (rxt-match-test regexp "*** Failers" 'nil)
@@ -6802,9 +7239,8 @@
 
 
 (ert-deftest rxt-pcre-test-00578 nil
-  :expected-result :failed
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "((?s-i:a.))b" "i")))
     (rxt-match-test regexp "a\nB"
@@ -6830,8 +7266,11 @@
 
 
 (ert-deftest rxt-pcre-test-00581 nil
+  :expected-result :failed
+  ;; The current method of faking case-folding behavior cannot make
+  ;; backreferences behave case-insensitively
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "(ab)\\d\\1" "i")))
     (rxt-match-test regexp "Ab4ab"
@@ -6945,7 +7384,6 @@
 
 
 (ert-deftest rxt-pcre-test-00592 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
@@ -6955,7 +7393,6 @@
 
 
 (ert-deftest rxt-pcre-test-00593 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
@@ -6965,7 +7402,6 @@
 
 
 (ert-deftest rxt-pcre-test-00594 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
@@ -6975,7 +7411,6 @@
 
 
 (ert-deftest rxt-pcre-test-00595 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
@@ -6985,7 +7420,6 @@
 
 
 (ert-deftest rxt-pcre-test-00596 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
@@ -6995,7 +7429,6 @@
 
 
 (ert-deftest rxt-pcre-test-00597 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
@@ -7046,7 +7479,6 @@
 
 
 (ert-deftest rxt-pcre-test-00602 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
@@ -7539,7 +7971,7 @@
 (ert-deftest rxt-pcre-test-00646 nil
   :expected-result :failed
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "<a[\\s]+href[\\s]*=[\\s]*          # find <a href=\n ([\\\"\\'])?                       # find single or double quote\n (?(1) (.*?)\\1 | ([^\\s]+))       # if quote found, match up to next matching\n                                 # quote, otherwise match up to next space\n" "isx")))
     (rxt-match-test regexp "<a href=abcd xyz"
@@ -7553,7 +7985,7 @@
 (ert-deftest rxt-pcre-test-00647 nil
   :expected-result :failed
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "<a\\s+href\\s*=\\s*                # find <a href=\n ([\"'])?                         # find single or double quote\n (?(1) (.*?)\\1 | (\\S+))          # if quote found, match up to next matching\n                                 # quote, otherwise match up to next space\n" "isx")))
     (rxt-match-test regexp "<a href=abcd xyz"
@@ -7567,7 +7999,7 @@
 (ert-deftest rxt-pcre-test-00648 nil
   :expected-result :failed
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "<a\\s+href(?>\\s*)=(?>\\s*)        # find <a href=\n ([\"'])?                         # find single or double quote\n (?(1) (.*?)\\1 | (\\S+))          # if quote found, match up to next matching\n                                 # quote, otherwise match up to next space\n" "isx")))
     (rxt-match-test regexp "<a href=abcd xyz"
@@ -7868,7 +8300,6 @@
 
 
 (ert-deftest rxt-pcre-test-00678 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
@@ -7880,7 +8311,6 @@
 
 
 (ert-deftest rxt-pcre-test-00679 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
@@ -7941,7 +8371,7 @@
 (ert-deftest rxt-pcre-test-00684 nil
   :expected-result :failed
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "^(?!:)                       # colon disallowed at start\n  (?:                         # start of item\n    (?: [0-9a-f]{1,4} |       # 1-4 hex digits or\n    (?(1)0 | () ) )           # if null previously matched, fail; else null\n    :                         # followed by colon\n  ){1,7}                      # end item; 1-7 of them required               \n  [0-9a-f]{1,4} $             # final hex number at end of string\n  (?(1)|.)                    # check that there was an empty component\n  " "xi")))
     (rxt-match-test regexp "a123::a123"
@@ -8018,7 +8448,6 @@
 
 
 (ert-deftest rxt-pcre-test-00689 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
@@ -8204,7 +8633,6 @@
 
 
 (ert-deftest rxt-pcre-test-00705 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
@@ -8698,7 +9126,6 @@
 
 
 (ert-deftest rxt-pcre-test-00750 nil
-  :expected-result :failed
   (let*
       ((case-fold-search nil)
        (regexp
@@ -8733,7 +9160,7 @@
 
 (ert-deftest rxt-pcre-test-00753 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "(abc)\\1" "i")))
     (rxt-match-test regexp "abc" 'nil)))
@@ -8749,7 +9176,7 @@
 
 (ert-deftest rxt-pcre-test-00755 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "[^a]*" "i")))
     (rxt-match-test regexp "12abc"
@@ -8760,7 +9187,7 @@
 
 (ert-deftest rxt-pcre-test-00756 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "[^a]*+" "i")))
     (rxt-match-test regexp "12abc"
@@ -8771,7 +9198,7 @@
 
 (ert-deftest rxt-pcre-test-00757 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "[^a]*?X" "i")))
     (rxt-match-test regexp "** Failers" 'nil)
@@ -8781,7 +9208,7 @@
 
 (ert-deftest rxt-pcre-test-00758 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "[^a]+?X" "i")))
     (rxt-match-test regexp "** Failers" 'nil)
@@ -8791,7 +9218,7 @@
 
 (ert-deftest rxt-pcre-test-00759 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "[^a]?X" "i")))
     (rxt-match-test regexp "12aXbcX"
@@ -8804,7 +9231,7 @@
 
 (ert-deftest rxt-pcre-test-00760 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "[^a]??X" "i")))
     (rxt-match-test regexp "12aXbcX"
@@ -8818,7 +9245,7 @@
 (ert-deftest rxt-pcre-test-00761 nil
   :expected-result :failed
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "[^a]?+X" "i")))
     (rxt-match-test regexp "12aXbcX"
@@ -8831,7 +9258,7 @@
 
 (ert-deftest rxt-pcre-test-00762 nil
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "[^a]{2,3}" "i")))
     (rxt-match-test regexp "abcdef"
@@ -8843,7 +9270,7 @@
 (ert-deftest rxt-pcre-test-00763 nil
   :expected-result :failed
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "[^a]{2,3}?" "i")))
     (rxt-match-test regexp "abcdef"
@@ -8855,7 +9282,7 @@
 (ert-deftest rxt-pcre-test-00764 nil
   :expected-result :failed
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "[^a]{2,3}+" "i")))
     (rxt-match-test regexp "abcdef"
@@ -9230,7 +9657,7 @@
 (ert-deftest rxt-pcre-test-00801 nil
   :expected-result :failed
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "(?<=a{2})b" "i")))
     (rxt-match-test regexp "xaabc"
@@ -9242,7 +9669,7 @@
 (ert-deftest rxt-pcre-test-00802 nil
   :expected-result :failed
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "(?<!a{2})b" "i")))
     (rxt-match-test regexp "xabc"
@@ -9278,7 +9705,7 @@
 (ert-deftest rxt-pcre-test-00805 nil
   :expected-result :failed
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "(?<=[^a]{2})b" "i")))
     (rxt-match-test regexp "axxbc"
@@ -9869,7 +10296,7 @@
 (ert-deftest rxt-pcre-test-00857 nil
   :expected-result :failed
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "^(?:((.)(?1)\\2|)|((.)(?3)\\4|.))$" "i")))
     (rxt-match-test regexp "1221"
@@ -10056,7 +10483,7 @@
 (ert-deftest rxt-pcre-test-00870 nil
   :expected-result :failed
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "^\\W*+(?:((.)\\W*+(?1)\\W*+\\2|)|((.)\\W*+(?3)\\W*+\\4|\\W*+.\\W*+))\\W*+$" "i")))
     (rxt-match-test regexp "1221"
@@ -11485,7 +11912,7 @@
 (ert-deftest rxt-pcre-test-01010 nil
   :expected-result :failed
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "(?>a(*:m))" "imsx")))
     (rxt-match-test regexp "a"
@@ -11495,7 +11922,7 @@
 (ert-deftest rxt-pcre-test-01011 nil
   :expected-result :failed
   (let*
-      ((case-fold-search t)
+      ((case-fold-search nil)
        (regexp
 	(rxt-pcre-to-elisp "(?>(a)(*:m))" "imsx")))
     (rxt-match-test regexp "a"

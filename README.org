@@ -141,21 +141,6 @@
 
     : (global-set-key [(meta %)] 'pcre-query-replace-regexp)
 
-*** Syntax highlighting (font-lock)
-    In Elisp buffers, you can have a regular expression in a string
-    syntax-highlighted by putting point on it and doing
-    =rxt-fontify-regexp-at-point= (=C-c / h=). Call the command a
-    second time to remove the highlighting, or call with a prefix
-    argument to remove all regexp highlighting in a buffer.
-
-    As long as syntax highlighting is enabled, any edits to the string
-    are highlighted "live" after a small delay. You can have as many
-    strings highlighted at once as you like, but too many might slow
-    down display.
-
-    This feature doesn't work for any other language modes yet, but it
-    would be easy to implement.
-
 *** Explain regexps
     When syntax-highlighting isn't enough to untangle some gnarly
     regexp you find in the wild, try the 'explain' commands:
