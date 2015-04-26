@@ -3029,7 +3029,7 @@ in character classes as outside them."
   (if (eq reb-re-syntax 'pcre)
       (let ((src (reb-target-binding reb-regexp-src)))
         (if src
-            (insert "\n/" src "/")
+            (insert "\n/" (replace-regexp-in-string "/" "\\/" src t t) "/")
           (insert "\n//")))
     ad-do-it))
 
