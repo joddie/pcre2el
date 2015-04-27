@@ -1087,6 +1087,13 @@ interactively."
         (rxt-verbose-rx-translation rxt-explain-verbosely))
     (rxt-pp-rx regexp (rxt-pcre-to-rx regexp flags))))
 
+;;;###autoload
+(defun rxt-quote-pcre (text)
+  "Return a PCRE regexp which matches TEXT literally.
+
+Any PCRE metacharacters in TEXT will be quoted with a backslash."
+  (rxt-adt->pcre (rxt-string text)))
+
 
 ;;;; Commands that depend on the major mode in effect
 

@@ -582,6 +582,10 @@
 (ert-deftest rxt-pcre-char-set-intersection ()
   (should (string-match-p (pcre-to-elisp "^[^\\W]*$") "foo")))
 
+(ert-deftest rxt-quote-pcre ()
+  (string=
+   (rxt-quote-pcre ".*[]foo+")
+   "\\.\\*\\[\\]foo\\+"))
 
 ;; String generation
 (ert-deftest rxt-string-generation ()
