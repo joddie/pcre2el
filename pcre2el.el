@@ -587,14 +587,15 @@ these commands only."
 
 (defvar rxt--toggle-flag-map
   (let ((map (make-sparse-keymap)))
-    (set-keymap-parent map minibuffer-local-map)
     (define-key map (kbd "C-c s") #'rxt--toggle-s-mode)
     (define-key map (kbd "C-c x") #'rxt--toggle-x-mode)
     (define-key map (kbd "C-c i") #'rxt--toggle-i-mode)
     map)
   "Keymap with bindings for toggling PCRE flags.
 
-These bindings will be used when reading PCREs from the minibuffer (see `rxt--read-pcre-map') and in the RE-Builder (see `rxt--re-builder-pcre-mode').")
+These bindings will be used when reading PCREs from the minibuffer
+\(see `rxt--read-pcre-map') and in the RE-Builder (see
+`rxt--re-builder-pcre-mode').")
 
 (defvar rxt--read-pcre-map
   (make-composed-keymap rxt--toggle-flag-map minibuffer-local-map)
@@ -3070,7 +3071,7 @@ in character classes as outside them."
     "Add keybindings for toggling PCRE flags to the RE Builder."
   :initial nil
   :lighter nil
-  :keymap 'rxt--toggle-flag-map)
+  :keymap rxt--toggle-flag-map)
 
 (defun rxt--re-builder-switch-pcre-mode ()
   (rxt--re-builder-pcre-mode
