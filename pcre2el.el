@@ -2372,7 +2372,11 @@ otherwise it would not match.")
         (if (and (> dec 0)
                  (or (< dec 10)
                      (>= rxt-subgroup-count dec)))
-            (rxt-backref dec)
+            (progn
+              (when rxt-pcre-case-fold
+                (display-warning
+                 'rxt "Backreferences with case-folding are handled poorly"))
+              (rxt-backref dec))
           ;; from "man pcrepattern": if the decimal number is greater
           ;; than 9 and there have not been that many capturing
           ;; subpatterns, PCRE re-reads up to three octal digits
@@ -2442,9 +2446,7 @@ in character classes as outside them."
             (if (cl-find ?i off) (setq case-fold nil))
             (when (string-match-p "[gmo]" token)
               (display-warning
-               'rxt
-               (format
-                "Unhandled PCRE flags (?%s" token))))
+               'rxt (format "Unhandled PCRE flags in (?%s" token))))
           (rxt-token-case
            (":" (setq shy t))        ; Shy group with flags (?isx-isx: ...
            (")"                      ; Set flags (?isx-isx)
