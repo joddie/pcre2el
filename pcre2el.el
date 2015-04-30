@@ -585,35 +585,38 @@ these commands only."
              (rxt--read-pcre prompt)))))
    nil))
 
-(defvar rxt--toggle-flag-map
-  (let ((map (make-sparse-keymap)))
-    (define-key map (kbd "C-c s") #'rxt--toggle-s-mode)
-    (define-key map (kbd "C-c x") #'rxt--toggle-x-mode)
-    (define-key map (kbd "C-c i") #'rxt--toggle-i-mode)
-    map)
-  "Keymap with bindings for toggling PCRE flags.
+(define-minor-mode rxt--read-pcre-mode
+    "Minor-mode with key-bindings for toggling PCRE flags.
 
-These bindings will be used when reading PCREs from the minibuffer
-\(see `rxt--read-pcre-map') and in the RE-Builder (see
-`rxt--re-builder-pcre-mode').")
-
-(defvar rxt--read-pcre-map
-  (make-composed-keymap rxt--toggle-flag-map minibuffer-local-map)
-  "Minibuffer keymap for `rxt--read-pcre'.")
+You should not normally call this directly.  It will be enabled
+in minibuffers for `read-regexp' and in the `re-builder' buffer
+when `pcre-mode' is active.  These bindings will also be added to
+`isearch-mode-map' in `pcre-mode'."
+  :initial nil
+  :lighter nil
+  :keymap
+  `((,(kbd "C-c s") . ,#'rxt--toggle-s-mode)
+    (,(kbd "C-c x") . ,#'rxt--toggle-x-mode)
+    (,(kbd "C-c i") . ,#'rxt--toggle-i-mode)))
 
 (defun rxt--read-pcre (prompt)
   "Read a PCRE regexp for translation, together with option flags.
 
-Currently `s' and `x' modes can be toggled with the following
-commands: \\<rxt--read-pcre-map>
+The `s', `x', and `i' flags can be toggled using the following
+commands: \\<rxt--read-pcre-mode-map>
 
 \\[rxt--toggle-s-mode] : toggle `s' (single-line) mode
 \\[rxt--toggle-x-mode] : toggle `x' (extended) mode
 \\[rxt--toggle-i-mode] : toggle `i' (case-insensitive) mode
 
-In single-line mode, `.' will match newlines.
-In extended mode, whitespace is not significant."
-  (read-from-minibuffer prompt nil rxt--read-pcre-map))
+In single-line mode, `.' will also match newlines.
+In extended mode, whitespace is ignored.
+
+Case-insensitive mode emulates matching without case,
+independently of Emacs's builtin `case-fold-search' setting.
+Note that this does not apply to backreferences."
+  (minibuffer-with-setup-hook #'rxt--read-pcre-mode
+    (read-from-minibuffer prompt)))
 
 (defun rxt--toggle-s-mode ()
   "Toggle emulated PCRE single-line (s) flag."
@@ -631,40 +634,70 @@ In extended mode, whitespace is not significant."
   (rxt--toggle-flag ?i))
 
 (defun rxt--toggle-flag (char)
-  "Toggle CHAR, a PCRE flag, in the regexp in the minibuffer."
-  (let* ((flags nil)
-         (re-builder-p (eq (current-buffer) (get-buffer reb-buffer)))
-         (flags-regexp
-          (if re-builder-p
-              (rx (group (+ (any ?i ?s ?x))))
-            (rx "(?" (group (+ (any ?i ?s ?x))) ")"))))
-    (save-excursion
-      (if re-builder-p
-          (progn
-            (goto-char (point-max))
-            (search-backward "/")
-            (forward-char))
-          (goto-char (minibuffer-prompt-end)))
-      (when (looking-at flags-regexp)
-        (setq flags (string-to-list (match-string 1)))
-        (let ((inhibit-modification-hooks t)) ; for re-builder
-          (replace-match "")))
-      (setq flags
-            (if (memq char flags)
-                (delq char flags)
-              (cons char flags)))
-      (when flags
-        (insert (if re-builder-p
-                    (concat flags)
-                  (concat "(?" flags ")")))))
-    (unless re-builder-p
-      (when
-          (and (= (point) (minibuffer-prompt-end))
-               (looking-at flags-regexp))
-        (forward-sexp)))))
+  "Toggle CHAR, a PCRE flag."
+  (cond
+    ((derived-mode-p 'reb-mode)         ; RE-Builder
+     (rxt--toggle-flag-re-builder char))
+    ((minibufferp)
+     (rxt--toggle-flag-minibuffer char))
+    (isearch-mode
+     (rxt--toggle-flag-isearch char))
+    (t
+     (error "Not in minibuffer, RE-Builder or isearch mode."))))
+
+(defun rxt--toggle-flag-re-builder (char)
+  (save-excursion
+    (goto-char (point-max))
+    (search-backward "/")
+    (forward-char)
+    (when (looking-at (rx (* (any ?i ?s ?x))))
+      (let ((inhibit-modification-hooks t))
+        (replace-match (rxt--xor-flags (match-string 0) char) t t))))
+  (reb-do-update))
+
+(defun rxt--toggle-flag-minibuffer (char)
+  (setf (buffer-substring (minibuffer-prompt-end) (point-max))
+        (rxt--toggle-flag-string (minibuffer-contents) char))
+  (when
+      (and (= (point) (minibuffer-prompt-end))
+           (looking-at (rx "(?" (group (+ (any ?i ?s ?x))) ")")))
+    (forward-sexp)))
+
+(defun rxt--toggle-flag-isearch (char)
+  (when isearch-regexp
+    (setq isearch-string
+          (rxt--toggle-flag-string isearch-string char))
+    (setq isearch-message
+          (mapconcat #'isearch-text-char-description isearch-string ""))
+    (isearch-search-and-update)))
+
+(defun rxt--toggle-flag-string (string char)
+  (if (string-match (rx string-start "(?" (group (+ (any ?i ?s ?x))) ")")
+                    string)
+      (let ((flags (rxt--xor-flags (match-string 1 string) char)))
+        (if (string= flags "")
+            (replace-match "" t t string)
+          (replace-match flags t t string 1)))
+    (format "(?%c)%s" char string)))
+
+(defun rxt--xor-flags (flags char)
+  (concat
+   (sort
+    (cl-set-exclusive-or (string-to-list flags) (list char))
+    #'<)))
 
 
 ;;;; Minor mode for using emulated PCRE syntax
+
+(defvar pcre-old-isearch-search-fun-function nil
+  "Original value of `isearch-search-fun-function' before entering `pcre-mode.'
+
+This function is wrapped by `pcre-isearch-search-fun-function'
+and restored on exit from `pcre-mode'.")
+(make-variable-buffer-local 'pcre-old-isearch-search-fun-function)
+
+(defvar pcre-old-isearch-key-bindings nil
+  "Alist of key-bindings to restore in `isearch-mode-map' on exiting `pcre-mode'.")
 
 ;;;###autoload
 (define-minor-mode pcre-mode
@@ -692,21 +725,32 @@ Also alters the behavior of `isearch-mode' when searching by regexp."
         (ad-enable-regexp "pcre-mode")
         ;; Set up isearch hooks
         (add-hook 'isearch-mode-hook #'pcre-isearch-mode-hook)
-        (add-hook 'isearch-mode-end-hook #'pcre-isearch-mode-end-hook))
+        (add-hook 'isearch-mode-end-hook #'pcre-isearch-mode-end-hook)
+        ;; Add the keybindings of `rxt--read-pcre-mode-map' to
+        ;; `isearch-mode-map' (so that they do not cause an exit from
+        ;; `isearch-mode'), and save any existing bindings for those
+        ;; keys to restore on exit from `pcre-mode'.
+        (setq pcre-old-isearch-key-bindings
+              (cl-loop for key being the key-seqs of rxt--read-pcre-mode-map
+                       for def = (lookup-key isearch-mode-map key)
+                       collect (cons (copy-sequence key)
+                                     (if (numberp def) nil def))))
+        (cl-loop for key being the key-seqs of rxt--read-pcre-mode-map
+                 using (key-bindings def)
+                 do (define-key isearch-mode-map key def)))
 
     ;; Disable advice
     (ad-disable-regexp "pcre-mode")
     ;; Remove from isearch hooks
     (remove-hook 'isearch-mode-hook #'pcre-isearch-mode-hook)
-    (remove-hook 'isearch-mode-end-hook #'pcre-isearch-mode-end-hook))
+    (remove-hook 'isearch-mode-end-hook #'pcre-isearch-mode-end-hook)
+    ;; Restore key-bindings
+    (cl-loop for (key . def) in pcre-old-isearch-key-bindings
+             do (define-key isearch-mode-map key def)))
 
   ;; "Activating" advice re-computes the function definitions, which
   ;; is necessary whether enabling or disabling
   (ad-activate-regexp "pcre-mode"))
-
-(defvar pcre-old-isearch-search-fun-function nil
-  "Saved value of `isearch-search-fun-function' to restore on exiting `pcre-mode.'")
-(make-variable-buffer-local 'pcre-old-isearch-search-fun-function)
 
 ;;; Cache of PCRE -> Elisp translations
 (defvar pcre-mode-cache-size 100
@@ -818,6 +862,15 @@ emulated PCRE regexps when `isearch-regexp' is true."
   ;; `want-backslash' to nil.
   (ad-set-arg 0 nil))
 
+(defadvice isearch-edit-string
+    (around pcre-mode disable)
+  "Add PCRE mode-toggling keys to Isearch minibuffer in regexp mode."
+  (if isearch-regexp
+      (minibuffer-with-setup-hook
+          #'rxt--read-pcre-mode
+        ad-do-it)
+    ad-do-it))
+
 ;;; Other hooks and defadvices
 
 ;;;###autoload
@@ -856,8 +909,7 @@ Consider using `pcre-mode' instead of this function."
   "Read regexp using PCRE syntax and convert to Elisp equivalent."
   (ad-set-arg 0 (concat "[PCRE] " prompt))
   (minibuffer-with-setup-hook
-      (lambda ()
-        (use-local-map rxt--read-pcre-map))
+      #'rxt--read-pcre-mode
     ad-do-it)
   (setq ad-return-value
         (pcre-to-elisp/cached ad-return-value)))
@@ -3067,14 +3119,8 @@ in character classes as outside them."
                 (when (or (reb-lisp-syntax-p) (eq reb-re-syntax 'pcre))
                   (setq reb-regexp-src re-src))))))))
 
-(define-minor-mode rxt--re-builder-pcre-mode
-    "Add keybindings for toggling PCRE flags to the RE Builder."
-  :initial nil
-  :lighter nil
-  :keymap rxt--toggle-flag-map)
-
 (defun rxt--re-builder-switch-pcre-mode ()
-  (rxt--re-builder-pcre-mode
+  (rxt--read-pcre-mode
    (if (eq reb-re-syntax 'pcre) 1 0)))
 
 (add-hook 'reb-mode-hook #'rxt--re-builder-switch-pcre-mode)
