@@ -705,18 +705,29 @@
     (let ((pcre (read-pcre-from-string "s/regexp/embedded\\/delimiters/x")))
       (should (string= pcre "(?x)regexp")))))
 
-;; (ert-deftest rxt--read-pcre ()
-;;   (let* ((unread-command-events
-;;           (string-to-list "regexp text\C-ci\C-cs\C-j"))
-;;          (result
-;;           (rxt--read-pcre "Test: ")))
-;;     (should (string= result "(?si)regexp text")))
+(ert-deftest rxt--read-pcre ()
+  (when noninteractive (ert-skip "Skipping interacive-only test"))
+  (let* ((unread-command-events
+          (string-to-list "regexp text\C-ci\C-cs\C-j"))
+         (result
+          (rxt--read-pcre "Test: ")))
+    (should (string= result "(?is)regexp text")))
 
-;;   (let* ((unread-command-events
-;;           (string-to-list "\C-ciregexp text\C-ci\C-j"))
-;;          (result
-;;           (rxt--read-pcre "Test: ")))
-;;     (should (string= result "regexp text"))))
+  (let* ((unread-command-events
+          (string-to-list "\C-ciregexp text\C-ci\C-j"))
+         (result
+          (rxt--read-pcre "Test: ")))
+    (should (string= result "regexp text"))))
+
+(ert-deftest rxt--toggle-flag-string ()
+  (cl-macrolet
+      ((should-toggle (string flag result)
+         `(should (string= (rxt--toggle-flag-string ,string ,flag) ,result))))
+    (should-toggle "foo" ?x "(?x)foo")
+    (should-toggle "(?x)foo" ?x "foo")
+    (should-toggle "(?xi)foo" ?x "(?i)foo")
+    (should-toggle "(?xi)foo" ?i "(?x)foo")
+    (should-toggle "(?xi)foo" ?s "(?isx)foo")))
 
 
 ;; The following tests are adapted from the first set of tests
