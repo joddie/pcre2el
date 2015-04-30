@@ -11,4 +11,7 @@ test: pcre2el-tests.elc
 	  --eval='(setq max-lisp-eval-depth 2000)' \
 	  --eval='(ert-run-tests-batch "^rxt-")'
 
-.PHONY: all test
+sandbox: pcre2el.elc
+	emacs -Q -L . --load=pcre2el
+
+.PHONY: all test sandbox
