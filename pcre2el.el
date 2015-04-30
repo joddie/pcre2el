@@ -1598,12 +1598,12 @@ string (see `rxt-explain-elisp', `rxt-explain-pcre' and
    (rxt-empty-char-set-p re)))
 
 (defun rxt-choice (&rest alternatives)
-  "Simplify a set of regexp alternatives.
+  "Construct the alternation (union) of several regexps.
 
-ALTERNATIVES should be a list of `rxt-syntax-tree' objects to be
-combined into an `rxt-choice' structure.  The resulting
-`rxt-choice' object represents a choice among ALTERNATIVES, which
-are simplified in the following ways:
+ALTERNATIVES should be a list of `rxt-syntax-tree' objects.
+The return value is an `rxt-choice' object representing a regexp
+which matches any one of ALTERNATIVES, but simplified in the
+following ways:
 
 - If ALTERNATIVES contains only one element, it is returned unchanged.
 
