@@ -2293,27 +2293,25 @@ otherwise it would not match.")
         ((rx "\\w") (rxt-wordchar))
         ((rx "\\W") (rxt-not-wordchar))
         ;; Other syntax categories
-        ((rx "\\"
-             (submatch (any "Ss"))
-             (submatch (any "-.w_()'\"$\\/<>|!")))
+        ((rx "\\" (submatch (any ?S ?s)) (submatch nonl))
          (let ((negated (string= (match-string 1) "S"))
-               (re
-                (rxt-syntax-class
-                 (car (rassoc (string-to-char (match-string 2))
-                              rx-syntax)))))
-           (if negated (rxt-negate re) re)))
+               (syntax
+                (car (rassoc (string-to-char (match-string 2))
+                              rx-syntax))))
+           (if syntax
+               (let ((re (rxt-syntax-class syntax)))
+                 (if negated (rxt-negate re) re))
+             (rxt-error "Invalid syntax class `\\%s'" (match-string 0)))))
         ;; Character categories
-        ((rx "\\"
-             (submatch (any "Cc"))
-             (submatch nonl))
+        ((rx "\\" (submatch (any ?C ?c)) (submatch nonl))
          (let ((negated (string= (match-string 1) "C"))
                (category
                 (car (rassoc (string-to-char (match-string 2))
                              rx-categories))))
-           (unless category
-             (rxt-error "Unrecognized character category %s" (match-string 2)))
-           (let ((re (rxt-char-category category)))
-             (if negated (rxt-negate re) re))))
+           (if category
+               (let ((re (rxt-char-category category)))
+                 (if negated (rxt-negate re) re))
+             (rxt-error "Invalid character category `%s'" (match-string 0)))))
         ;; Backreference
         ((rx (seq "\\" (submatch (any "1-9"))))
          (rxt-backref (string-to-number (match-string 1))))
