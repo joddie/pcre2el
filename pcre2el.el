@@ -1431,9 +1431,12 @@ string (see `rxt-explain-elisp', `rxt-explain-pcre' and
 
 ;;;; Error handling
 
-(put 'rxt-invalid-regexp
-     'error-conditions
-     '(error invalid-regexp rxt-invalid-regexp))
+(if (fboundp 'define-error)
+    (define-error 'rxt-invalid-regexp "Invalid regexp" 'invalid-regexp)
+  (put 'rxt-invalid-regexp
+         'error-conditions
+         '(rxt-invalid-regexp invalid-regexp error))
+  (put 'rxt-invalid-regexp 'error-message "Invalid regexp"))
 
 (defun rxt-error (&rest format-args)
   (signal 'rxt-invalid-regexp (list (apply #'format format-args))))
