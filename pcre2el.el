@@ -1731,7 +1731,7 @@ list (OTHER-ELEMENTS CHAR-SET CASE-FOLDED-CHAR-SET):
 (defun rxt-syntax-class (symbol)
   (if (assoc symbol rx-syntax)
       (make-rxt-syntax-class :symbol symbol)
-    (rxt-error "Invalid syntax class symbol %s" symbol)))
+    (rxt-error "Invalid syntax class symbol `%s'" symbol)))
 
 ;;; Character categories (Emacs only)
 (cl-defstruct (rxt-char-category
@@ -1741,7 +1741,7 @@ list (OTHER-ELEMENTS CHAR-SET CASE-FOLDED-CHAR-SET):
 (defun rxt-char-category (symbol)
   (if (assoc symbol rx-categories)
       (make-rxt-char-category :symbol symbol)
-    (rxt-error "Invalid character category symbol %s" symbol)))
+    (rxt-error "Invalid character category symbol `%s'" symbol)))
 
 
 ;;; Char sets
@@ -1958,7 +1958,7 @@ CHAR-SET may be any of the following types: `rxt-char-set-union',
         (push cset elts))
 
        (t
-        (rxt-error "Can't take intersection of non-character-set %s" cset))))
+        (rxt-error "Can't take intersection of non-character-set %S" cset))))
 
     (if (null elts)
         (rxt-negate cmpl)
@@ -2457,14 +2457,14 @@ in character classes as outside them."
                   rxt-pcre-case-fold case-fold)
             (throw 'return (rxt-empty-string)))))
          ;; Other constructions like (?=, (?!, etc. are not recognised
-         (t (rxt-error "Unrecognized PCRE extended construction (?%c"
+         (t (rxt-error "Unrecognized PCRE extended construction `(?%c'"
                        (char-after)))))
 
        ;; No special (* ...) verbs are recognised
        ((rx "*")
         (let ((begin (point)))
-          (search-forward ")")
-          (rxt-error "Unrecognized PCRE extended construction (*%s"
+          (search-forward ")" nil 'go-to-end)
+          (rxt-error "Unrecognized PCRE extended construction `(*%s'"
                      (buffer-substring begin (point))))))
 
       ;; Parse the remainder of the subgroup
@@ -2577,11 +2577,11 @@ in character classes as outside them."
      (intern (match-string 1)))
     ;; Error on unknown posix-class-like syntax
     ((rx "[:" (* (any "a-z")) ":]")
-     (rxt-error "Unknown posix class %s" (match-string 0)))
+     (rxt-error "Unknown posix character class `%s'" (match-string 0)))
     ;; Error on [= ... ]= collation syntax
     ((rx "[" (submatch (any "." "="))
          (* (any "a-z")) (backref 1) "]")
-     (rxt-error "%s collation syntax not supported" (match-string 0)))
+     (rxt-error "Unsupported collation syntax `%s'" (match-string 0)))
     ;; Other characters stand for themselves
     ((rx (or "\n" nonl))
      (string-to-char (match-string 0))))))
@@ -2755,7 +2755,7 @@ in character classes as outside them."
            `(not ,(rxt-adt->rx (rxt-char-set-negation-elt re))))
 
           (t
-           (rxt-error "No RX translation for %s" re)))))
+           (rxt-error "No RX translation of `%s'" (rxt-to-string re))))))
 
     ;; Store source information on each fragment of the generated RX
     ;; sexp for rxt-explain mode
@@ -2799,7 +2799,7 @@ in character classes as outside them."
      (let ((s (rxt-primitive-pcre re)))
        (if s
            (list s 1)
-         (rxt-error "No PCRE translation for %s" re))))
+         (rxt-error "No PCRE translation of `%s'" (rxt-to-string re)))))
 
    (rxt-string (rxt-string->pcre re))
    (rxt-seq (rxt-seq->pcre re))
@@ -2816,7 +2816,7 @@ in character classes as outside them."
    ;; ((rxt-char-set-intersection re) (rxt-char-set-intersection->pcre re))
 
    (t
-    (rxt-error "No PCRE translation for %s" re))))
+    (rxt-error "No PCRE translation of `%s'" (rxt-to-string re)))))
 
 (defconst rxt-pcre-metachars (rx (any "\\^.$|()[]*+?{}")))
 (defconst rxt-pcre-charset-metachars (rx (any "]" "[" "\\" "^" "-")))
@@ -2913,7 +2913,7 @@ in character classes as outside them."
            (if (rxt-char-set-union-p elt)
                (list
                 (concat "[^" (rxt-char-set->pcre/chars elt) "]") 1)
-             (rxt-error "No PCRE translation of %s" elt))))
+             (rxt-error "No PCRE translation of `%s'" (rxt-to-string elt)))))
 
         (t
          (rxt-error "Non-char-set in rxt-char-set->pcre: %s" re))))
