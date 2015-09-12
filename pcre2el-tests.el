@@ -730,6 +730,60 @@
     (should-toggle "(?xi)foo" ?s "(?isx)foo")))
 
 
+(defmacro rxt-with-minor-mode (mode &rest body)
+  (declare (indent 1))
+  (cl-assert (symbolp mode))
+  (let ((saved-mode (make-symbol (concat "saved-" (symbol-name mode)))))
+    `(let ((,saved-mode ,mode))
+       (unwind-protect
+            (progn
+              (,mode +1)
+              ,@body)
+         (,mode (if ,saved-mode +1 0))))))
+
+(defmacro rxt-with-minor-modes (modes &rest body)
+  (declare (indent 1))
+  (cl-assert (listp modes))
+  (if (null modes)
+      (macroexp-progn body)
+    `(rxt-with-minor-modes ,(cdr modes)
+       (rxt-with-minor-mode ,(car modes)
+         ,@body))))
+
+;;; Test for repeated searching in evil-mode (issue #19)
+(ert-deftest rxt-pcre-mode-evil-search ()
+  (when noninteractive
+    (ert-skip "Skipping interactive test `pcre-mode-evil-search'"))
+  (unless (require 'evil nil t)
+    (ert-skip "Skipping `pcre-mode-evil-search' since `evil-mode' is not installed"))
+  (cl-flet ((process-input (&rest keys)
+              (let ((unread-command-events
+                     (listify-key-sequence
+                      (apply #'vconcat `(,@keys ,(kbd "C-M-c"))))))
+                (recursive-edit))))
+    (rxt-with-minor-modes (pcre-mode evil-mode)
+      (save-window-excursion
+        (with-temp-buffer
+          (insert "\n\n(this) (that) (the other)")
+          (goto-char (point-min))
+          (set-window-buffer (selected-window) (current-buffer))
+
+          (process-input "/\\(th" (kbd "RET"))
+          (should (looking-at "(this)"))
+
+          (process-input "n")
+          (should (looking-at "(that)"))
+
+          (process-input "n")
+          (should (looking-at "(the other)"))
+
+          (process-input "N")
+          (should (looking-at "(that)"))
+
+          (process-input "N")
+          (should (looking-at "(this)")))))))
+
+
 ;; The following tests are adapted from the first set of tests
 ;; ("testinput1") in the PCRE library's test suite: see
 ;; http://www.pcre.org/ and the copyright notice at the beginning of
