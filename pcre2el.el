@@ -871,6 +871,26 @@ emulated PCRE regexps when `isearch-regexp' is true."
         ad-do-it)
     ad-do-it))
 
+;;; evil-mode advice
+(defadvice evil-search-function
+    (around pcre-mode (forward regexp-p wrap) disable)
+  (if (and regexp-p (not isearch-mode))
+      (let ((real-search-function ad-do-it))
+        (setq ad-return-value
+              (pcre-decorate-search-function real-search-function)))
+    ad-do-it))
+
+(with-eval-after-load "evil"
+  (when pcre-mode
+    (ad-enable-advice 'evil-search-function 'around 'pcre-mode)
+    (ad-activate 'evil-search-function)))
+
+(defun pcre-decorate-search-function (real-search-function)
+  (lambda (string &optional bound noerror count)
+    (funcall real-search-function
+             (pcre-to-elisp/cached string)
+             bound noerror count)))
+
 ;;; Other hooks and defadvices
 
 ;;;###autoload
