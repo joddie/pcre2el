@@ -966,8 +966,8 @@ Consider using `pcre-mode' instead of this function."
 
 (defadvice find-tag-regexp
   (before pcre-mode first (regexp &optional next-p other-window) disable)
-  "Read regexp using PCRE syntax and convert to Elisp equivalent."
-  "Perform `find-tag-regexp' using emulated PCRE regexp syntax."
+  "Read regexp using PCRE syntax and convert to Elisp equivalent.
+Perform `find-tag-regexp' using emulated PCRE regexp syntax."
   (interactive
    (let ((args (find-tag-interactive "[PCRE] Find tag regexp: " t)))
      (list (rxt-pcre-to-elisp (nth 0 args))
