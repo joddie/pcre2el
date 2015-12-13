@@ -1,12 +1,15 @@
 language: emacs
 
 env:
-  - EMACS=emacs24
-  - EMACS=emacs-snapshot
+  - "EMACS=emacs24        CHECK_TARGET=test"
+  - "EMACS=emacs24        CHECK_TARGET=test-interactive"
+  - "EMACS=emacs-snapshot CHECK_TARGET=test"
+  - "EMACS=emacs-snapshot CHECK_TARGET=test-interactive"
 
 matrix:
   allow_failures:
-   - env: EMACS=emacs-snapshot
+   - env: "EMACS=emacs-snapshot CHECK_TARGET=test"
+   - env: "EMACS=emacs-snapshot CHECK_TARGET=test-interactive"
 
 install:
   - if [ "$EMACS" = "emacs24" ]; then
@@ -24,7 +27,7 @@ install:
     fi
 
 script:
-  - make test EMACS=$EMACS
+  - make $CHECK_TARGET EMACS=$EMACS
 
 notifications:
   email: false
