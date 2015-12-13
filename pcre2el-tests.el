@@ -94,6 +94,13 @@
 (require 'ert)
 (require 'cl-lib)
 
+;; Some older versions of ert lack `ert-skip'.
+(defun rxt-skip-test (message)
+  (if (fboundp 'ert-skip)
+      (ert-skip message)
+    (message (concat "SKIPPING: " message))
+    (ert-pass)))
+
 
 ;;; Tests for source-location
 (ert-deftest rxt-location ()
@@ -706,7 +713,7 @@
       (should (string= pcre "(?x)regexp")))))
 
 (ert-deftest rxt--read-pcre ()
-  (when noninteractive (ert-skip "Skipping interacive-only test"))
+  (when noninteractive (rxt-skip-test "Skipping interacive-only test"))
   (let* ((unread-command-events
           (string-to-list "regexp text\C-ci\C-cs\C-j"))
          (result
@@ -753,9 +760,9 @@
 ;;; Test for repeated searching in evil-mode (issue #19)
 (ert-deftest rxt-pcre-mode-evil-search ()
   (when noninteractive
-    (ert-skip "Skipping interactive test `pcre-mode-evil-search'"))
+    (rxt-skip-test "Skipping interactive test `pcre-mode-evil-search'"))
   (unless (require 'evil nil t)
-    (ert-skip "Skipping `pcre-mode-evil-search' since `evil-mode' is not installed"))
+    (rxt-skip-test "Skipping `pcre-mode-evil-search' since `evil-mode' is not installed"))
   (cl-flet ((process-input (&rest keys)
               (let ((unread-command-events
                      (listify-key-sequence
