@@ -881,8 +881,8 @@ emulated PCRE regexps when `isearch-regexp' is true."
               (pcre-decorate-search-function real-search-function)))
     ad-do-it))
 
-(with-eval-after-load "evil"
-  (when pcre-mode
+(eval-after-load "evil"
+  '(when pcre-mode
     (ad-enable-advice 'evil-search-function 'around 'pcre-mode)
     (ad-activate 'evil-search-function)))
 
