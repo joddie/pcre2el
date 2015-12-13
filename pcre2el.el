@@ -1,14 +1,14 @@
-;;; pcre2el.el --- parse, convert, and font-lock PCRE, Emacs and rx regexps -*- lexical-binding: t -*-
+;;; pcre2el.el --- regexp syntax converter -*- lexical-binding: t -*-
 
-;; Copyright (C) 2012-2014 Jon Oddie <jonxfield@gmail.com>
+;; Copyright (C) 2012-2015 Jon Oddie <jonxfield@gmail.com>
 
 ;; Author:			joddie <jonxfield at gmail.com>
 ;; Hacked additionally by:	opensource at hardakers dot net
 ;; Created:			14 Feb 2012
-;; Updated:			24 July 2014
+;; Updated:			13 December 2015
 ;; Version:                     1.8
 ;; Url:                         https://github.com/joddie/pcre2el
-;; Package-Requires:            ((cl-lib "0.3"))
+;; Package-Requires:            ((emacs "24") (cl-lib "0.3"))
 
 ;; This file is NOT part of GNU Emacs.
 
@@ -448,6 +448,7 @@
 (require 're-builder)
 (require 'advice)
 (require 'ring)
+(require 'pcase)
 
 ;;; Customization group
 (defgroup rxt nil
