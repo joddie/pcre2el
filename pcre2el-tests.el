@@ -12468,4 +12468,16 @@
    (equal (rxt-elisp-to-rx "\\(?3:test\\)")
           '(submatch-n 3 "test"))))
 
+
+
+;;; Test runner script
+
+(defun rxt-run-tests ()
+  (let ((test-runner
+         (if noninteractive
+             #'ert-run-tests-batch
+           #'ert-run-tests-interactively)))
+    (let ((stats (funcall test-runner "^rxt-")))
+      (kill-emacs (ert-stats-completed-unexpected stats)))))
+
 ;;; pcre2el.tests.el ends here

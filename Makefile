@@ -1,17 +1,20 @@
+EMACS ?= emacs
+
 all: pcre2el.elc
 
-pcre2el-tests.elc: pcre2el.elc
+clean:
+	rm -f *.elc
 
 %.elc: %.el
-	emacs --batch -L . -f batch-byte-compile $<
+	$(EMACS) --batch -L . --funcall batch-byte-compile "$<"
 
-test: pcre2el-tests.elc
-	emacs --batch -L . \
-	  --load=pcre2el-tests \
-	  --eval='(setq max-lisp-eval-depth 2000)' \
-	  --eval='(ert-run-tests-batch "^rxt-")'
+test: clean all
+	$(EMACS) --batch -L . -l pcre2el-tests --funcall rxt-run-tests
 
-sandbox: pcre2el.elc
-	emacs -Q -L . --load=pcre2el
+test-interactive: clean all
+	$(EMACS) -Q -nw -L . -l pcre2el-tests --funcall rxt-run-tests
 
-.PHONY: all test sandbox
+sandbox: all
+	$(EMACS) -Q -L . -l pcre2el
+
+.PHONY: all test test-interactive sandbox
