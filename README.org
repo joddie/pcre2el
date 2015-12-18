@@ -53,7 +53,6 @@
      - =C-c / e ′= :: =rxt-elisp-to-strings=
      - =C-c / e t= :: =rxt-toggle-elisp-rx=
      - =C-c / t= :: =rxt-toggle-elisp-rx=
-     - =C-c / h= :: =rxt-fontify-regexp-at-point=
 
 *** Interactive input and output
     When used interactively, the conversion commands can read a regexp
