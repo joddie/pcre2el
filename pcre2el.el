@@ -6,7 +6,7 @@
 ;; Hacked additionally by:	opensource at hardakers dot net
 ;; Created:			14 Feb 2012
 ;; Updated:			13 December 2015
-;; Version:                     1.8
+;; Version:                     1.9
 ;; Url:                         https://github.com/joddie/pcre2el
 ;; Package-Requires:            ((emacs "24") (cl-lib "0.3"))
 
