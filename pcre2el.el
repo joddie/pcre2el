@@ -1061,9 +1061,9 @@ Throws an error if REGEXP contains any infinite quantifiers."
         ;; Pretty-print rx form
         (save-restriction
           (let* ((start (point))
-                 (rx-syntax (rxt-elisp-to-rx regex))
+                 (rx--syntax-codes (rxt-elisp-to-rx regex))
                  (rx-form
-                  (pcase rx-syntax
+                  (pcase rx--syntax-codes
                     (`(seq . ,rest) `(rx . ,rest))
                     (form           `(rx ,form)))))
             (rxt-print rx-form)
@@ -1750,7 +1750,7 @@ list (OTHER-ELEMENTS CHAR-SET CASE-FOLDED-CHAR-SET):
   symbol)
 
 (defun rxt-syntax-class (symbol)
-  (if (assoc symbol rx-syntax)
+  (if (assoc symbol rx--syntax-codes)
       (make-rxt-syntax-class :symbol symbol)
     (rxt-error "Invalid syntax class symbol `%s'" symbol)))
 
@@ -1760,7 +1760,7 @@ list (OTHER-ELEMENTS CHAR-SET CASE-FOLDED-CHAR-SET):
   symbol)
 
 (defun rxt-char-category (symbol)
-  (if (assoc symbol rx-categories)
+  (if (assoc symbol rx--categories)
       (make-rxt-char-category :symbol symbol)
     (rxt-error "Invalid character category symbol `%s'" symbol)))
 
@@ -2318,7 +2318,7 @@ otherwise it would not match.")
          (let ((negated (string= (match-string 1) "S"))
                (syntax
                 (car (rassoc (string-to-char (match-string 2))
-                              rx-syntax))))
+                              rx--syntax-codes))))
            (if syntax
                (let ((re (rxt-syntax-class syntax)))
                  (if negated (rxt-negate re) re))
@@ -2328,7 +2328,7 @@ otherwise it would not match.")
          (let ((negated (string= (match-string 1) "C"))
                (category
                 (car (rassoc (string-to-char (match-string 2))
-                             rx-categories))))
+                             rx--categories))))
            (if category
                (let ((re (rxt-char-category category)))
                  (if negated (rxt-negate re) re))
