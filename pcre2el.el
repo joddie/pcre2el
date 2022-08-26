@@ -2761,7 +2761,7 @@ in character classes as outside them."
                  ((and (equal from 1) (null to))
                   `(,(if greedy '+ '+?) ,body))
                  ((and (zerop from) (equal to 1))
-                  `(,(if greedy ? ??) ,body))
+                  `(,(if greedy '\? ??) ,body))
                  ((null to)
                   `(>= ,from ,body))
                  ((equal from to)
