@@ -464,11 +464,13 @@
 (defface rxt-highlight-face
   '((((min-colors 16581375) (background light)) :background "#eee8d5")
     (((min-colors 16581375) (background dark)) :background "#222222"))
-  "Face for highlighting corresponding regex syntax in `rxt-explain' buffers."
+  "Face for highlighting corresponding regex syntax in
+ `rxt-explain' buffers."
   :group 'rxt)
 
 (defcustom rxt-verbose-rx-translation nil
-  "Non-nil if `rxt-pcre-to-rx' and `rxt-elisp-to-rx' should use verbose `rx' primitives.
+  "Non-nil if `rxt-pcre-to-rx' and `rxt-elisp-to-rx' should use
+ verbose `rx' primitives.
 
 Verbose primitives are things like `line-start' instead of `bol',
 etc."
@@ -476,7 +478,8 @@ etc."
   :type 'boolean)
 
 (defcustom rxt-explain-verbosely t
-  "Non-nil if `rxt-explain-elisp' and `rxt-explain-pcre' should use verbose `rx' primitives.
+  "Non-nil if `rxt-explain-elisp' and `rxt-explain-pcre' should
+ use verbose `rx' primitives.
 
 This overrides the value of `rxt-verbose-rx-translation' for
 these commands only."
