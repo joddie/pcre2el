@@ -594,7 +594,7 @@ You should not normally call this directly.  It will be enabled
 in minibuffers for `read-regexp' and in the `re-builder' buffer
 when `pcre-mode' is active.  These bindings will also be added to
 `isearch-mode-map' in `pcre-mode'."
-  :initial nil
+  :initial-value nil
   :lighter nil
   :keymap
   `((,(kbd "C-c s") . ,#'rxt--toggle-s-mode)
@@ -716,8 +716,9 @@ translate to its Emacs equivalent:
 - `ibuffer-do-replace-regexp'
 
 Also alters the behavior of `isearch-mode' when searching by regexp."
-  nil " PCRE"
-  nil
+  :init-value nil
+  :lighter " PCRE"
+  :keymap nil
   :global t
 
   (if pcre-mode
@@ -1248,7 +1249,10 @@ the kill ring; see the two functions named above for details."
 
 ;;;###autoload
 (define-minor-mode rxt-mode
-  "Regex translation utilities." nil nil)
+  "Regex translation utilities."
+  :init-value nil
+  :lighter nil
+  :keymap rxt-mode-map)
 
 ;;;###autoload
 (defun turn-on-rxt-mode ()
