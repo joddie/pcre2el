@@ -1,20 +1,22 @@
-EMACS ?= emacs
+ELPA_DEPENDENCIES=a.el
 
-all: pcre2el.elc
+ELPA_ARCHIVES=melpa gnu
 
-clean:
-	rm -f *.elc
+TEST_ERT_FILES="pcre2el-tests.el"
+LINT_CHECKDOC_FILES=$(wildcard *.el)
+LINT_PACKAGE_LINT_FILES=$(wildcard *.el)
+LINT_COMPILE_FILES=$(wildcard *.el)
 
-%.elc: %.el
-	$(EMACS) --batch -L . --funcall batch-byte-compile "$<"
+makel.mk:
+	# Download makel
+	@if [ -f ../makel/makel.mk ]; then \
+		ln -s ../makel/makel.mk .; \
+	else \
+		curl \
+		--fail --silent --show-error --insecure --location \
+		--retry 9 --retry-delay 9 \
+		-O https://gitlab.petton.fr/DamienCassou/makel/raw/v0.7.1/makel.mk; \
+	fi
 
-test: clean all
-	$(EMACS) --batch -L . -l pcre2el-tests --funcall rxt-run-tests
-
-test-interactive: clean all
-	$(EMACS) -Q -nw -L . -l pcre2el-tests --funcall rxt-run-tests
-
-sandbox: all
-	$(EMACS) -Q -L . -l pcre2el
-
-.PHONY: all test test-interactive sandbox
+# Include makel.mk if present
+-include makel.mk
