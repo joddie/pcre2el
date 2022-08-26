@@ -1067,11 +1067,11 @@ Throws an error if REGEXP contains any infinite quantifiers."
         (save-restriction
           (let* ((start (point))
                  (rx--syntax-codes (rxt-elisp-to-rx regex))
-                 (rx-form
+                 (rx--form
                   (pcase rx--syntax-codes
                     (`(seq . ,rest) `(rx . ,rest))
                     (form           `(rx ,form)))))
-            (rxt-print rx-form)
+            (rxt-print rx--form)
             (narrow-to-region start (point)))
           (pp-buffer)
           ;; remove the extra newline that pp-buffer inserts
