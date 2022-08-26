@@ -8,7 +8,7 @@
 ;; Updated:			13 December 2015
 ;; Version:                     1.8
 ;; Url:                         https://github.com/joddie/pcre2el
-;; Package-Requires:            ((emacs "24") (cl-lib "0.3"))
+;; Package-Requires:            ((emacs "25.1") (cl-lib "0.3") (a "1.0.0"))
 
 ;; This file is NOT part of GNU Emacs.
 
@@ -449,6 +449,7 @@
 (require 'advice)
 (require 'ring)
 (require 'pcase)
+(require 'a)
 
 ;;; Customization group
 (defgroup rxt nil
@@ -1914,7 +1915,7 @@ Example:
                  (let* ((split-point (/ (+ start end) 2))
                         (left (recur start split-point))
                         (right (recur (1+ split-point) end)))
-                   (merge left right))))))
+                   (a-merge left right))))))
          (merge (left right)
            (cond ((null left) right)
                  ((null right) left)
