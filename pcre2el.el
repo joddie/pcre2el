@@ -556,7 +556,7 @@ these commands only."
           (condition-case nil
               (save-excursion
                 (while (nth 3 (syntax-ppss)) (forward-char))
-                (let ((re (eval (preceding-sexp))))
+                (let ((re (eval (elisp--preceding-sexp))))
                   (if (stringp re) re
                     (read-string prompt))))
             (error
