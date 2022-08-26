@@ -1044,7 +1044,7 @@ Throws an error if REGEXP contains any infinite quantifiers."
   (let* ((context (syntax-ppss))
          (string-start (nth 8 context)))
     (cond (string-start (goto-char string-start))
-          ((looking-back "\"") (backward-sexp))
+          ((looking-back "\"" nil t) (backward-sexp))
           ((looking-at "\"") nil)
           (t
            ;; Search backwards, leaving point in place on error
