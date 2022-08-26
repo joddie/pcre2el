@@ -2776,6 +2776,8 @@ in character classes as outside them."
                   (ranges (rxt-char-set-union-ranges re))
                   (classes (rxt-char-set-union-classes re))
                   (case-fold (rxt-char-set-union-case-fold re)))
+             ;; Do not let the byte compiler optimize this variable out.
+             (ignore case-fold)
              (if (and (null chars) (null ranges) (= 1 (length classes)))
                  (car classes)
                `(any ,@chars ,@ranges ,@classes))))
