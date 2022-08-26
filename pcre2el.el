@@ -1923,7 +1923,7 @@ Example:
                         (left (recur start split-point))
                         (right (recur (1+ split-point) end)))
                    (a-merge left right))))))
-         (merge (left right)
+         (a-merge (left right)
            (cond ((null left) right)
                  ((null right) left)
                  (t
