@@ -2895,12 +2895,12 @@ in character classes as outside them."
     (if (null (cdr elts))
         (list s lev)
       (cl-destructuring-bind
-          (s1 lev1) (rxt-choice-elts->pcre (cdr elts))
+          (s1 _lev1) (rxt-choice-elts->pcre (cdr elts))
         (list (concat s "|" s1) 3)))))
 
 (defun rxt-submatch->pcre (re)
   (cl-destructuring-bind
-      (s lev) (rxt-adt->pcre/lev (rxt-submatch-body re))
+      (s _lev) (rxt-adt->pcre/lev (rxt-submatch-body re))
     (list (concat "(" s ")") 0)))
 
 (defun rxt-repeat->pcre (re)
@@ -3039,7 +3039,7 @@ in character classes as outside them."
    (t           ; to > from
     (let* ((strs-n (rxt-repeat-n->strings from strings))
            (accum (cl-copy-list strs-n)))
-      (dotimes (i (- to from))
+      (dotimes (_i (- to from))
         (setq strs-n (rxt-concat-product strs-n strings))
         (setq accum (nconc accum strs-n)))
       accum))))
