@@ -1,3 +1,4 @@
 *.elc
 /test.pl
+/makel.mk
 *~
