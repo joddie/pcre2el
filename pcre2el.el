@@ -449,7 +449,6 @@
 (require 'advice)
 (require 'ring)
 (require 'pcase)
-(require 'a)
 
 ;;; Customization group
 (defgroup rxt nil
@@ -1922,8 +1921,8 @@ Example:
                  (let* ((split-point (/ (+ start end) 2))
                         (left (recur start split-point))
                         (right (recur (1+ split-point) end)))
-                   (cl-merge left right))))))
-         (cl-merge (left right)
+                   (pcre2el-merge left right))))))
+         (pcre2el-merge (left right)
            (cond ((null left) right)
                  ((null right) left)
                  (t
