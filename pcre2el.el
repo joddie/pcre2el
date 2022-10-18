@@ -6,7 +6,7 @@
 ;; Hacked additionally by:	opensource at hardakers dot net
 ;; Created:			14 Feb 2012
 ;; Updated:			13 December 2015
-;; Version:                     1.10
+;; Version:                     1.11
 ;; Url:                         https://github.com/joddie/pcre2el
 ;; Package-Requires:            ((emacs "25.1"))
 
@@ -449,7 +449,6 @@
 (require 'advice)
 (require 'ring)
 (require 'pcase)
-(require 'a)
 
 ;;; Customization group
 (defgroup rxt nil
@@ -1922,8 +1921,8 @@ Example:
                  (let* ((split-point (/ (+ start end) 2))
                         (left (recur start split-point))
                         (right (recur (1+ split-point) end)))
-                   (cl-merge left right))))))
-         (cl-merge (left right)
+                   (pcre2el-merge left right))))))
+         (pcre2el-merge (left right)
            (cond ((null left) right)
                  ((null right) left)
                  (t
