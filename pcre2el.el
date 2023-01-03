@@ -3124,7 +3124,9 @@ in character classes as outside them."
   (around rxt () activate compile)
   "This function is hacked for emulated PCRE syntax and regexp conversion."
   (if (eq reb-re-syntax 'pcre)
-      (let ((src (reb-target-binding reb-regexp-src)))
+      (let ((src (if (fboundp #'reb-target-value)
+                     (reb-target-value 'reb-regexp-src)
+                   (reb-target-binding reb-regexp-src))))
         (if src
             (insert "\n/" (replace-regexp-in-string "/" "\\/" src t t) "/")
           (insert "\n//")))
