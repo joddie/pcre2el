@@ -1,4 +1,4 @@
-;;; pcre2el.tests.el -- tests for pcre2el/rxt
+;;; pcre2el.tests.el -- tests for pcre2el/rxt  -*- lexical-binding: t; -*-
 
 ;;; The bulk of the tests for pcre->elisp conversion are adapted from
 ;;; part of the PCRE library's test suite. Therefore:
