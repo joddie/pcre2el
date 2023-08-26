@@ -2,3 +2,7 @@
 /test.pl
 /makel.mk
 *~
+
+# ELPA-generated files
+/pcre2el-autoloads.el
+/pcre2el-pkg.el
