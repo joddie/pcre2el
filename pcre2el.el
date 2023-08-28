@@ -6,7 +6,7 @@
 ;; Hacked additionally by:	opensource at hardakers dot net
 ;; Created:			14 Feb 2012
 ;; Updated:			13 December 2015
-;; Version:                     1.10
+;; Version:                     1.11
 ;; Url:                         https://github.com/joddie/pcre2el
 ;; Package-Requires:            ((emacs "25.1"))
 
@@ -449,7 +449,6 @@
 (require 'advice)
 (require 'ring)
 (require 'pcase)
-(require 'a)
 
 ;;; Customization group
 (defgroup rxt nil
@@ -1922,8 +1921,8 @@ Example:
                  (let* ((split-point (/ (+ start end) 2))
                         (left (recur start split-point))
                         (right (recur (1+ split-point) end)))
-                   (cl-merge left right))))))
-         (cl-merge (left right)
+                   (pcre2el-merge left right))))))
+         (pcre2el-merge (left right)
            (cond ((null left) right)
                  ((null right) left)
                  (t
@@ -3125,7 +3124,9 @@ in character classes as outside them."
   (around rxt () activate compile)
   "This function is hacked for emulated PCRE syntax and regexp conversion."
   (if (eq reb-re-syntax 'pcre)
-      (let ((src (reb-target-binding reb-regexp-src)))
+      (let ((src (if (fboundp #'reb-target-value)
+                     (reb-target-value 'reb-regexp-src)
+                   (reb-target-binding reb-regexp-src))))
         (if src
             (insert "\n/" (replace-regexp-in-string "/" "\\/" src t t) "/")
           (insert "\n//")))
