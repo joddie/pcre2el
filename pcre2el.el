@@ -660,7 +660,7 @@ Note that this does not apply to backreferences."
   (reb-do-update))
 
 (defun rxt--toggle-flag-minibuffer (char)
-  (setf (buffer-substring-no-properties (minibuffer-prompt-end) (point-max))
+  (setf (buffer-substring (minibuffer-prompt-end) (point-max))
         (rxt--toggle-flag-string (minibuffer-contents) char))
   (when
       (and (= (point) (minibuffer-prompt-end))
@@ -2493,7 +2493,7 @@ in character classes as outside them."
         (let ((begin (point)))
           (search-forward ")" nil 'go-to-end)
           (rxt-error "Unrecognized PCRE extended construction `(*%s'"
-                     (buffer-substring-no-properties begin (point))))))
+                     (buffer-substring begin (point))))))
 
       ;; Parse the remainder of the subgroup
       (unless shy (cl-incf rxt-subgroup-count))
